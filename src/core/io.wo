@@ -1,0 +1,7 @@
+proc dump [x: Any] -> I8 is
+  0
+end
+
+proc read [] -> String is
+  0
+end

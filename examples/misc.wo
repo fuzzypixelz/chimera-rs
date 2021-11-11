@@ -1,0 +1,29 @@
+pure greet (thing: String -> String)
+is 
+  $"Hello, {thing}!\n" 
+end
+
+pure func (x: I64 -> y: I64 -> I64)
+is
+  x + y 
+end
+pure func x y z is x + y + z end
+
+let x: I64 = default
+let x: I64 ~ default
+
+proc func (x: I64, x: I64) -> I64 is x + y end
+proc func x y is x + y end
+
+proc main -> Void is 
+  puts (greet "World")
+end
+
+/*
+  Compound data-types.
+*/
+[1, 2, 3] // List
+#[1, 2, 3] // Vector
+{1: "a", 2: "b"} // Map
+{"a", "b", "c"} // Set
+let thing = World in $"hello {thing}" end

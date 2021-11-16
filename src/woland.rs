@@ -61,26 +61,25 @@ impl Expr {
     fn eval<'a>(&'a self, env: &'a Env, ast: &AST) -> Prim {
         match self {
             Expr::Prim(prim) => prim.to_owned(),
-            Expr::Id(id) => env
+            Expr::Name(id) => env
                 .names
                 .get(id)
                 .unwrap_or_else(|| panic!("Woland: undefined reference to {} identifier.", id))
                 .eval(env, ast),
-            Expr::Call(Call { proc_name, args }) => {
-                if !ast.decls.contains_key(proc_name) {
+            Expr::Call(Call { func_name, args }) => {
+                if !ast.decls.contains_key(func_name) {
                     // panic!("Woland: undefined reference to {} procedure.", proc_name);
                 };
 
-                match proc_name.as_str() {
+                match func_name.as_str() {
                     // TODO: This is a big hack to simulate std lib functions.
                     "dump" => {
+                        if args.len() == 0 {
+                            panic!("Woland: dump takes at least one argument.")
+                        }
                         println!(
                             "{:?}",
-                            args.as_ref()
-                                .expect("Woland: dump takes at least one argument.")
-                                .iter()
-                                .map(|a| a.eval(env, ast))
-                                .collect::<Vec<Prim>>()
+                            args.iter().map(|a| a.eval(env, ast)).collect::<Vec<Prim>>()
                         );
                         Prim::I64(0)
                     }
@@ -93,34 +92,25 @@ impl Expr {
                     }
                     _ => {
                         let mut env: Env = Env::new();
-                        let Decl::Proc(proc) = &ast
+                        let Decl::Func(func) = &ast
                             .decls
-                            .get(proc_name)
-                            .unwrap_or_else(|| panic!("Woland: {} is not a procedure.", proc_name));
-                        match &proc.kind.0 {
-                            Some(args_kind) => {
-                                let args_vals = args.as_ref().unwrap_or_else(|| {
-                                    panic!(
-                                        "Woland: procedure {} expects {} arguments, not zero.",
-                                        proc_name,
-                                        args_kind.len()
-                                    )
-                                });
-                                if args_kind.len() != args_kind.len() {
-                                    panic!(
-                                        "Woland: procedure {} expects {} arguments, not {}.",
-                                        proc_name,
-                                        args_kind.len(),
-                                        args_vals.len()
-                                    )
-                                }
-                                for ((k, _), v) in args_kind.iter().zip(args_vals.iter()) {
-                                    env.names.insert(k.to_owned(), v.to_owned());
-                                }
-                            }
-                            None => {}
+                            .get(func_name)
+                            .unwrap_or_else(|| panic!("Woland: {} is not a function.", func_name));
+                        if func.kind.params.len() == 0 {
+                            panic!("Woland: no type inference yet!")
                         }
-                        proc.run(&mut env, ast)
+                        if func.kind.params.len() != args.len() {
+                            panic!(
+                                "Woland: function {} expects {} arguments, not {}.",
+                                func_name,
+                                func.kind.params.len(),
+                                args.len()
+                            )
+                        }
+                        for ((k, _), v) in func.kind.params.iter().zip(args.iter()) {
+                            env.names.insert(k.to_owned(), v.to_owned());
+                        }
+                        func.run(&mut env, ast)
                     }
                 }
             }
@@ -143,17 +133,17 @@ impl Instr {
     }
 }
 
-impl Proc {
+impl Func {
     pub fn run<'a>(&'a self, env: &'a mut Env, ast: &AST) -> Prim {
         if self.body.len() == 0 {
-            panic!("Woland: empty procedure body.");
+            panic!("Woland: empty function body.");
         }
         for instr in &self.body[..self.body.len() - 1] {
             instr.execute(env, ast);
         }
         match self.body.last().unwrap() {
             Instr::Expr(ret) => ret.eval(env, ast),
-            _ => panic!("Woland: expected expression at proc's end."),
+            _ => panic!("Woland: expected expression at function's end."),
         }
     }
 }

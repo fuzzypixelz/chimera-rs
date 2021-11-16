@@ -1,40 +1,177 @@
 /*
     This is a prototyping parser for Woland.
 
-    I'm not yet sure what the syntax will look like
-    in the end, so you'll find no grammar in here.
+    A. Reserved keywords.
+
+      let   end
+      true  false
+      and   or    not
+      if    then  elif else
+      do    loop  for  while in do break
+      match with
+      type  actor
+
+    B. Other tokens.
+
+      : -> ~ =
+
+    C. Grammar.
+
+      prog  -> decl*
+
+      decl  -> type | function | actor
+
+      func  -> 'let' name ':' kind ('~' | '=') body
+
+      kind  -> (name ':' name '->')* name
+
+      body  -> instr* 'end'
+            |  instr newline
+
+      instr -> expr newline
+            |  bind
+            |  cond
+            |  loop
+
+      expr  -> prim
+            |  name
+            |  call
+
+      prim  -> string | integer | boolean
+
+      call  -> name expr*
+
+      bind  -> 'let' 'mut'? name ':' name ('~' | '=') expr newline
+
+      cond  -> 'if' expr 'then' body ('elif' exp 'then' body)* ('else' body)? 'end'
+
+      loop  -> 'loop' expr 'do' body 'end'
 */
 
 use nom::{
     branch::alt,
-    bytes::complete::{tag, take_until},
-    character::complete::{alpha1, alphanumeric1, char, i64, multispace0, newline, space0, space1},
-    combinator::{opt, recognize},
+    bytes::complete::tag,
+    character::complete::{alpha1, alphanumeric1, char, i64, multispace0, newline, space0},
+    combinator::{into, opt, recognize, verify},
     error::ParseError,
-    multi::{many0, many1, separated_list1},
+    multi::{many0, many1},
     sequence::{delimited, pair, separated_pair, terminated},
     IResult,
 };
 
 use crate::ast::*;
 
-fn literal(input: &str) -> IResult<&str, Expr> {
+pub fn ast(input: &str) -> IResult<&str, AST> {
+    let (input, decls) = many1(func)(input)?;
+    Ok((
+        input,
+        AST {
+            decls: decls.into_iter().collect(),
+        },
+    ))
+}
+
+pub fn func(input: &str) -> IResult<&str, (String, Decl)> {
+    let (input, _) = ws(tag("let"))(input)?;
+    let (input, name) = ws(name)(input)?;
+    let (input, kind) = ws(kind)(input)?;
+    let (input, _) = alt((ws(tag("~")), ws(tag("="))))(input)?;
+    let (input, body) = many1(ws(instr))(input)?;
+    let (input, _) = ws(tag("end"))(input)?;
+    Ok((input, (name.to_string(), Decl::Func(Func { kind, body }))))
+}
+
+fn kind(input: &str) -> IResult<&str, Kind> {
+    let (input, _) = ws(char(':'))(input)?;
+    let (input, params) = many0(terminated(ws(name_typed), ws(tag("->"))))(input)?;
+    let (input, ret) = ws(name)(input)?;
+    Ok((
+        input,
+        Kind {
+            params: params
+                .iter()
+                .map(|(s, t)| (s.to_string(), t.to_string()))
+                .collect(),
+            ret: ret.to_string(),
+        },
+    ))
+}
+
+fn instr(input: &str) -> IResult<&str, Instr> {
+    let (input, result) = alt((terminated(into(expr), newline), ws(bind)))(input)?;
+    Ok((input, result))
+}
+
+impl From<Expr> for Instr {
+    fn from(expr: Expr) -> Self {
+        Instr::Expr(expr)
+    }
+}
+
+fn expr(input: &str) -> IResult<&str, Expr> {
+    // None of the alt inputs show consume multispace!
+    let (input, expr) = alt((prim, into(name), call))(input)?;
+    let (input, _) = space0(input)?;
+    Ok((input, expr))
+}
+
+impl From<&str> for Expr {
+    fn from(str: &str) -> Self {
+        Expr::Name(str.to_string())
+    }
+}
+
+fn prim(input: &str) -> IResult<&str, Expr> {
     let (input, int) = i64(input)?;
     use Prim::*;
     Ok((input, Expr::Prim(I64(int))))
 }
 
-fn call(input: &str) -> IResult<&str, Expr> {
-    let (input, proc) = alpha1(input)?;
-    let (input, _) = char('(')(input)?;
-    let (input, args) = opt(many1(expr))(input)?;
-    let (input, _) = char(')')(input)?;
+fn name(input: &str) -> IResult<&str, &str> {
+    verify(
+        recognize(pair(
+            alt((alpha1, tag("_"))),
+            many0(alt((alphanumeric1, tag("_")))),
+        )),
+        |s: &str| !vec!["let", "end"].contains(&s),
+    )(input)
+}
 
+fn name_typed(input: &str) -> IResult<&str, (&str, &str)> {
+    delimited(
+        opt(ws(char('('))),
+        separated_pair(ws(name), ws(char(':')), name),
+        opt(ws(char(')'))),
+    )(input)
+}
+
+fn call(input: &str) -> IResult<&str, Expr> {
+    // TODO: fix call.
+    let (input, _) = char('@')(input)?;
+    let (input, func) = name(input)?;
+    let (input, _) = space0(input)?;
+    let (input, args) = many0(terminated(expr, space0))(input)?;
     Ok((
         input,
         Expr::Call(Call {
-            proc_name: proc.to_string(),
-            args,
+            func_name: func.to_string(),
+            args: args,
+        }),
+    ))
+}
+
+fn bind(input: &str) -> IResult<&str, Instr> {
+    let (input, _) = ws(tag("let"))(input)?;
+    let (input, (id, ty)) = ws(name_typed)(input)?;
+    let (input, _) = alt((ws(tag("~")), ws(tag("="))))(input)?;
+    let (input, expr) = expr(input)?;
+    let (input, _) = newline(input)?;
+    Ok((
+        input,
+        Instr::Bind(Bind {
+            id: id.to_string(),
+            ty: ty.to_string(),
+            expr,
         }),
     ))
 }
@@ -48,100 +185,6 @@ where
     terminated(inner, multispace0)
 }
 
-fn identifier(input: &str) -> IResult<&str, &str> {
-    recognize(pair(
-        alt((alpha1, tag("_"))),
-        many0(alt((alphanumeric1, tag("_")))),
-    ))(input)
-}
-
-fn identifier_typed(input: &str) -> IResult<&str, (&str, &str)> {
-    separated_pair(ws(identifier), ws(char(':')), identifier)(input)
-}
-
-fn bind(input: &str) -> IResult<&str, Instr> {
-    let (input, _) = tag("let")(input)?;
-    let (input, _) = space1(input)?;
-    let (input, (id, ty)) = identifier_typed(input)?;
-    let (input, _) = space1(input)?;
-    let (input, _) = alt((tag("~"), tag("=")))(input)?;
-    let (input, _) = space1(input)?;
-    let (input, expr) = expr(input)?;
-    let (input, _) = newline(input)?;
-    Ok((
-        input,
-        Instr::Bind(Bind {
-            id: id.to_string(),
-            ty: ty.to_string(),
-            expr,
-        }),
-    ))
-}
-
-fn expr(input: &str) -> IResult<&str, Expr> {
-    let id_expr = |i| -> IResult<&str, Expr> {
-        let (i, id) = identifier(i)?;
-        Ok((i, Expr::Id(id.to_string())))
-    };
-
-    let (input, _) = space0(input)?; // HACK: this doesn't properly enforce identation.
-    let (input, expr) = alt((literal, call, id_expr))(input)?;
-    let (input, _) = space0(input)?;
-    Ok((input, expr))
-}
-
-fn expr_instr(input: &str) -> IResult<&str, Instr> {
-    let (input, expr) = expr(input)?;
-    let (input, _) = newline(input)?;
-    Ok((input, Instr::Expr(expr)))
-}
-
-fn proc_kind(input: &str) -> IResult<&str, (Option<Vec<(String, String)>>, String)> {
-    let (input, arg_kind) = opt(delimited(
-        ws(char('(')),
-        separated_list1(ws(tag(",")), ws(identifier_typed)),
-        ws(char(')')),
-    ))(input)?;
-    let (input, _) = ws(tag("->"))(input)?;
-    let (input, ret_kind) = ws(identifier)(input)?;
-    Ok((
-        input,
-        (
-            match arg_kind {
-                Some(args) => Some(
-                    args.iter()
-                        .map(|(s, t)| (s.to_string(), t.to_string()))
-                        .collect(),
-                ),
-                None => None,
-            },
-            ret_kind.to_string(),
-        ),
-    ))
-}
-
-pub fn proc(input: &str) -> IResult<&str, (String, Decl)> {
-    let (input, _) = ws(tag("proc"))(input)?;
-    let (input, name) = ws(identifier)(input)?;
-    let (input, kind) = ws(proc_kind)(input)?;
-    let (input, _) = ws(tag("is"))(input)?;
-    let (input, body_input) = take_until("end")(input)?;
-    let (_, body) = many0(alt((ws(bind), ws(expr_instr))))(body_input)?;
-    let (input, _) = ws(tag("end"))(input)?;
-    let (input, _) = multispace0(input)?;
-    Ok((input, (name.to_string(), Decl::Proc(Proc { kind, body }))))
-}
-
-pub fn ast(input: &str) -> IResult<&str, AST> {
-    let (input, decls) = many1(proc)(input)?;
-    Ok((
-        input,
-        AST {
-            decls: decls.into_iter().collect(),
-        },
-    ))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -149,22 +192,22 @@ mod tests {
 
     #[test]
     fn basic_literal() {
-        assert_eq!(literal("42"), Ok(("", Expr::Prim(I64(42)))));
+        assert_eq!(prim("42"), Ok(("", Expr::Prim(I64(42)))));
     }
 
     #[test]
-    fn basic_proc_call() {
+    fn basic_call() {
         assert_eq!(
-            call("dump(666 my_favourite_number)"),
+            instr("@dump 666 my_favourite_number\n"),
             Ok((
                 "",
-                Expr::Call(Call {
-                    proc_name: "dump".to_string(),
-                    args: Some(vec![
+                Instr::Expr(Expr::Call(Call {
+                    func_name: "dump".to_string(),
+                    args: vec![
                         Expr::Prim(I64(666)),
-                        Expr::Id("my_favourite_number".to_string())
-                    ])
-                })
+                        Expr::Name("my_favourite_number".to_string())
+                    ]
+                }))
             ))
         );
     }
@@ -186,36 +229,53 @@ mod tests {
 
     #[test]
     fn id_with_type() {
-        assert_eq!(identifier_typed("x: I64"), Ok(("", ("x", "I64"))));
+        assert_eq!(name_typed("x: I64"), Ok(("", ("x", "I64"))));
     }
 
     #[test]
-    fn proc_kind_two_args() {
+    fn kind_no_args() {
         assert_eq!(
-            proc_kind("(x: I64, y: I64) -> I64"),
+            kind(": I64"),
             Ok((
                 "",
-                (
-                    Some(vec![
-                        ("x".to_string(), "I64".to_string()),
-                        ("y".to_string(), "I64".to_string())
-                    ]),
-                    "I64".to_string()
-                )
+                Kind {
+                    params: vec![],
+                    ret: "I64".to_string()
+                }
             ))
         )
     }
 
     #[test]
-    fn basic_proc() {
+    fn kind_two_args() {
         assert_eq!(
-            proc("proc main -> I32 is\n    -1\n end"),
+            kind(": (x: I64) -> (y: I64) -> I64"),
+            Ok((
+                "",
+                Kind {
+                    params: vec![
+                        ("x".to_string(), "I64".to_string()),
+                        ("y".to_string(), "I64".to_string())
+                    ],
+                    ret: "I64".to_string()
+                }
+            ))
+        )
+    }
+
+    #[test]
+    fn basic_func() {
+        assert_eq!(
+            func("let main: I32 ~\n    -1\n end"),
             Ok((
                 "",
                 (
                     "main".to_string(),
-                    Decl::Proc(Proc {
-                        kind: (None, "I32".to_string()),
+                    Decl::Func(Func {
+                        kind: Kind {
+                            params: vec![],
+                            ret: "I32".to_string()
+                        },
                         body: vec![Instr::Expr(Expr::Prim(I64(-1)))],
                     })
                 )
@@ -226,22 +286,28 @@ mod tests {
     #[test]
     fn ast_two_procs() {
         assert_eq!(
-            ast("proc whatever -> I8 is\n   0\n end\n\nproc main -> I64 is\n   -1\n end"),
+            ast("let whatever: I8 =\n   0\n end\n\nlet main: I64 ~\n   -1\n end"),
             Ok((
                 "",
                 AST {
                     decls: vec![
                         (
                             "whatever".to_string(),
-                            Decl::Proc(Proc {
-                                kind: (None, "I8".to_string()),
+                            Decl::Func(Func {
+                                kind: Kind {
+                                    params: vec![],
+                                    ret: "I8".to_string()
+                                },
                                 body: vec![Instr::Expr(Expr::Prim(I64(0)))],
                             })
                         ),
                         (
                             "main".to_string(),
-                            Decl::Proc(Proc {
-                                kind: (None, "I64".to_string()),
+                            Decl::Func(Func {
+                                kind: Kind {
+                                    params: vec![],
+                                    ret: "I64".to_string()
+                                },
                                 body: vec![Instr::Expr(Expr::Prim(I64(-1)))],
                             })
                         ),
@@ -256,23 +322,26 @@ mod tests {
     #[test]
     fn proc_with_call() {
         assert_eq!(
-            ast("proc main -> Void is\n   dump(2021)\n end"),
+            ast("let nothing: Void ~\n   @dump 2021\n end"),
             Ok((
                 "",
-                AST {
+                (AST {
                     decls: vec![(
-                        "main".to_string(),
-                        Decl::Proc(Proc {
-                            kind: (None, "Void".to_string()),
+                        "nothing".to_string(),
+                        Decl::Func(Func {
+                            kind: Kind {
+                                params: vec![],
+                                ret: "Void".to_string()
+                            },
                             body: vec![Instr::Expr(Expr::Call(Call {
-                                proc_name: "dump".to_string(),
-                                args: Some(vec![Expr::Prim(I64(2021))])
+                                func_name: "dump".to_string(),
+                                args: vec![Expr::Prim(I64(2021))]
                             }))],
                         })
                     )]
                     .into_iter()
                     .collect()
-                }
+                })
             ))
         );
     }
@@ -280,14 +349,17 @@ mod tests {
     #[test]
     fn proc_with_bind() {
         assert_eq!(
-            ast("proc main -> Void is\n  let number: I8 = 42\n end"),
+            ast("let main: Void ~\n  let number: I8 = 42\n end"),
             Ok((
                 "",
                 AST {
                     decls: vec![(
                         "main".to_string(),
-                        Decl::Proc(Proc {
-                            kind: (None, "Void".to_string()),
+                        Decl::Func(Func {
+                            kind: Kind {
+                                params: vec![],
+                                ret: "Void".to_string()
+                            },
                             body: vec![Instr::Bind(Bind {
                                 id: "number".to_string(),
                                 ty: "I8".to_string(),

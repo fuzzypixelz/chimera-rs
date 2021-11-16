@@ -1,7 +1,17 @@
-proc dump [x: Any] -> I8 is
-  0
+let dump: (Any a => x: a) -> I8 ~
+  __intrinsic("dump")
 end
 
-proc read [] -> String is
-  0
+let dump x ~ __intrinsic("dump")
+
+let add: (Num a => x: a -> y: a -> a) =
+  x + y
 end
+
+let add x y = x + y
+
+let read: String ~ 
+  __intrinsic("read")
+end
+
+let read ~ __intrinsic("read")

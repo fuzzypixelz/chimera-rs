@@ -1,5 +1,45 @@
 use std::{collections::HashMap, fmt::Debug};
 
+#[derive(Debug, PartialEq)]
+pub struct AST {
+    pub decls: HashMap<String, Decl>,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum Decl {
+    // Type(Type),
+    Func(Func),
+    // Actor(Actor),
+}
+
+#[derive(Debug, PartialEq)]
+pub struct Func {
+    // pub kind: Option<(Vec<(String, String)>, String)>,
+    pub kind: Kind,
+    pub body: Vec<Instr>,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct Kind {
+    pub params: Vec<(String, String)>,
+    pub ret: String,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum Instr {
+    Expr(Expr),
+    Bind(Bind),
+    // Cond(Cond),
+    // Loop(Loop),
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum Expr {
+    Prim(Prim),
+    Name(String),
+    Call(Call),
+}
+
 #[derive(Debug, PartialEq, Clone)]
 pub enum Prim {
     I64(i64),
@@ -11,8 +51,8 @@ pub enum Prim {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Call {
-    pub proc_name: String,
-    pub args: Option<Vec<Expr>>,
+    pub func_name: String,
+    pub args: Vec<Expr>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -22,51 +62,14 @@ pub struct Bind {
     pub expr: Expr,
 }
 
-// #[derive(Debug, PartialEq)]
-// pub enum UnaryOp {
-//     Minus,
-//     Not,
-// }
-
-// #[derive(Debug, PartialEq)]
-// pub enum BinaryOp {
-//     Plus,
-//     Minus,
-//     Mult,
-//     Div,
-//     And,
-//     Or,
-// }
-
-#[derive(Debug, PartialEq, Clone)]
-pub enum Expr {
-    Prim(Prim),
-    Id(String),
-    Call(Call),
-    // Unary(UnaryOp, Box<Expr>),
-    // Binary(BinaryOp, Box<Expr>, Box<Expr>),
+#[derive(Debug, PartialEq)]
+pub struct Cond {
+    cond: Expr,
+    fst: Vec<Instr>,
+    snd: Vec<Instr>,
 }
 
 #[derive(Debug, PartialEq)]
-pub struct Proc {
-    pub kind: (Option<Vec<(String, String)>>, String),
-    pub body: Vec<Instr>,
-}
-
-#[derive(Debug, PartialEq)]
-pub enum Decl {
-    Proc(Proc),
-    // Pure(Pure),
-    // Actor(Actor),
-}
-
-#[derive(Debug, PartialEq)]
-pub enum Instr {
-    Expr(Expr),
-    Bind(Bind),
-}
-
-#[derive(Debug, PartialEq)]
-pub struct AST {
-    pub decls: HashMap<String, Decl>,
+pub struct Loop {
+    body: Vec<Instr>,
 }

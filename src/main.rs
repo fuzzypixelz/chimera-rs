@@ -29,9 +29,9 @@ fn main() {
         .expect("Woland: error reading source file. You are on your own.");
     let (_, program) = ast(&source).finish().unwrap();
     // println!("Executing:\n{:?}\n", program);
-    let Decl::Proc(entry) = &program
+    let Decl::Func(entry) = &program
         .decls
         .get(&String::from("main"))
-        .expect("Woland: the main procedure was never declared.");
+        .expect("Woland: the main function was never declared.");
     entry.run(&mut Env::new(), &program);
 }

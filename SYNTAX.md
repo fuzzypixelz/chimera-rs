@@ -1,6 +1,6 @@
 # Woland Syntax
 
-It's no secret that the following is heavily inspired by Ruby.
+It's no secret that the following is heavily inspired by ~~Ruby~~ Lua.
 
 ## (Neo)Vim support
 
@@ -9,18 +9,18 @@ to generate a parser that can be used with
 [nvim-treesitter](https://github.com/nvim-treesitter/nvim-treesitter)
 
 ```ruby
-pure add (Num T => x: T -> y: T -> T) is
+let add: Num T => x: T -> y: T -> T =
   /// @param x: first integer
   /// @param y: second integer
   /// @value: sum of `x` and `y`
   x + y
 end
 
-pure add x y is x + y end
+let add x y = x + y end
 
-proc greet (thing: String) -> Void is
+let greet: thing: String -> Void ~
   puts f"Hello, {thing}!\n"
 end
 
-proc greet thing is puts f"Hello, {thing}!\n" end
+let greet thing ~ puts f"Hello, {thing}!\n" end
 ```

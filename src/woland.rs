@@ -129,6 +129,16 @@ impl Instr {
                 // any side-effects. Beware!
                 expr.eval(env, ast);
             }
+            Instr::Cond(Cond { cond, fst, snd }) => match cond.eval(env, ast) {
+                Prim::Bool(b) => {
+                    if b {
+                        fst.iter().for_each(|i| i.execute(env, ast))
+                    } else {
+                        snd.iter().for_each(|i| i.execute(env, ast))
+                    }
+                }
+                _ => panic!("Woland: TypeError: expected Bool."),
+            },
         }
     }
 }

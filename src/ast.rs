@@ -29,7 +29,7 @@ pub struct Kind {
 pub enum Instr {
     Expr(Expr),
     Bind(Bind),
-    // Cond(Cond),
+    Cond(Cond),
     // Loop(Loop),
 }
 
@@ -45,7 +45,7 @@ pub enum Prim {
     I64(i64),
     // U64(u64),
     // F64(f64),
-    // Bool(bool),
+    Bool(bool),
     String(String),
 }
 
@@ -64,12 +64,12 @@ pub struct Bind {
 
 #[derive(Debug, PartialEq)]
 pub struct Cond {
-    cond: Expr,
-    fst: Vec<Instr>,
-    snd: Vec<Instr>,
+    pub cond: Expr,
+    pub fst: Vec<Instr>,
+    pub snd: Vec<Instr>,
 }
 
 #[derive(Debug, PartialEq)]
 pub struct Loop {
-    body: Vec<Instr>,
+    pub body: Vec<Instr>,
 }

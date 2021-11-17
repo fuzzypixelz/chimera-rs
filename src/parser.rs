@@ -48,6 +48,8 @@
       loop  -> 'loop' expr 'do' body 'end'
 */
 
+use std::thread::LocalKey;
+
 use nom::{
     branch::alt,
     bytes::complete::tag,
@@ -98,7 +100,13 @@ fn kind(input: &str) -> IResult<&str, Kind> {
 }
 
 fn instr(input: &str) -> IResult<&str, Instr> {
-    let (input, result) = alt((terminated(into(expr), newline), ws(bind), into(ws(cond))))(input)?;
+    let (input, result) = alt((
+        terminated(into(expr), newline),
+        ws(bind),
+        into(ws(cond)),
+        into(ws(loop_)),
+        terminated(into(keyword), newline),
+    ))(input)?;
     Ok((input, result))
 }
 
@@ -111,6 +119,18 @@ impl From<Expr> for Instr {
 impl From<Cond> for Instr {
     fn from(cond: Cond) -> Self {
         Instr::Cond(cond)
+    }
+}
+
+impl From<Loop> for Instr {
+    fn from(loop_: Loop) -> Self {
+        Instr::Loop(loop_)
+    }
+}
+
+impl From<Keyword> for Instr {
+    fn from(word: Keyword) -> Self {
+        Instr::Keyword(word)
     }
 }
 
@@ -157,7 +177,7 @@ fn name(input: &str) -> IResult<&str, &str> {
             alt((alpha1, tag("_"))),
             many0(alt((alphanumeric1, tag("_")))),
         )),
-        |s: &str| !vec!["let", "end", "true", "false", "if", "then", "else"].contains(&s),
+        |s: &str| !vec!["let", "end", "true", "false", "if", "then", "else", "loop"].contains(&s),
     )(input)
 }
 
@@ -219,6 +239,15 @@ fn loop_(input: &str) -> IResult<&str, Loop> {
     let (input, body) = many1(ws(instr))(input)?;
     let (input, _) = ws(tag("end"))(input)?;
     Ok((input, Loop { body }))
+}
+
+fn keyword(input: &str) -> IResult<&str, Keyword> {
+    // let (input, keyword) = alt((
+    // value(Keyword::Break, ws(tag("break"))),
+    // value(Keyword::Whatever, ws(tag("whatever"))),
+    // ))(input)?;
+    let (input, keyword) = value(Keyword::Break, ws(tag("break")))(input)?;
+    Ok((input, keyword))
 }
 
 fn ws<'a, F: 'a, O, E: ParseError<&'a str>>(
@@ -478,5 +507,21 @@ mod tests {
                 }
             ))
         );
+    }
+
+    #[test]
+    fn basic_loop() {
+        assert_eq!(
+            loop_("loop\n @dump 42\n end"),
+            Ok((
+                "",
+                Loop {
+                    body: vec![Instr::Expr(Expr::Call(Call {
+                        func_name: "dump".to_string(),
+                        args: vec![Expr::Prim(I64(42))]
+                    }))]
+                }
+            ))
+        )
     }
 }

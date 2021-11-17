@@ -25,12 +25,13 @@ pub struct Kind {
     pub ret: String,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Instr {
     Expr(Expr),
     Bind(Bind),
     Cond(Cond),
-    // Loop(Loop),
+    Keyword(Keyword),
+    Loop(Loop),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -55,21 +56,27 @@ pub struct Call {
     pub args: Vec<Expr>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Bind {
     pub id: String,
     pub ty: String,
     pub expr: Expr,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Cond {
     pub cond: Expr,
     pub fst: Vec<Instr>,
     pub snd: Vec<Instr>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Loop {
     pub body: Vec<Instr>,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum Keyword {
+    Break,
+    // Instrinsic(String),
 }

@@ -45,14 +45,17 @@ use std::io;
 
 use crate::ast::*;
 
+#[derive(Clone)]
 pub struct Env {
     names: HashMap<String, Expr>,
+    loops: Vec<Loop>,
 }
 
 impl Env {
     pub fn new() -> Self {
         Self {
             names: HashMap::new(),
+            loops: vec![],
         }
     }
 }
@@ -138,6 +141,25 @@ impl Instr {
                     }
                 }
                 _ => panic!("Woland: TypeError: expected Bool."),
+            },
+            Instr::Loop(loop_) => {
+                env.loops.push(loop_.to_owned());
+                while env.loops.len() != 0 {
+                    env.to_owned()
+                        .loops
+                        .last()
+                        .unwrap()
+                        .body
+                        .iter()
+                        .for_each(|i| i.execute(env, ast))
+                }
+            }
+            Instr::Keyword(keyword) => match keyword {
+                Keyword::Break => {
+                    env.loops
+                        .pop()
+                        .unwrap_or_else(|| panic!("Woland: can only break out of a loop."));
+                }
             },
         }
     }

@@ -48,6 +48,7 @@ use crate::ast::*;
 #[derive(Clone)]
 pub struct Env {
     names: HashMap<String, Expr>,
+    vars: HashMap<String, Expr>,
     loops: Vec<Loop>,
 }
 
@@ -55,7 +56,18 @@ impl Env {
     pub fn new() -> Self {
         Self {
             names: HashMap::new(),
+            vars: HashMap::new(),
             loops: vec![],
+        }
+    }
+
+    pub fn get(&self, item: String) -> Expr {
+        match self.names.get(&item) {
+            None => match self.vars.get(&item) {
+                None => panic!("Woland: undefined reference to {} name.", item),
+                Some(e) => e.to_owned(),
+            },
+            Some(e) => e.to_owned(),
         }
     }
 }
@@ -64,11 +76,7 @@ impl Expr {
     fn eval<'a>(&'a self, env: &'a Env, ast: &AST) -> Prim {
         match self {
             Expr::Prim(prim) => prim.to_owned(),
-            Expr::Name(id) => env
-                .names
-                .get(id)
-                .unwrap_or_else(|| panic!("Woland: undefined reference to {} identifier.", id))
-                .eval(env, ast),
+            Expr::Name(id) => env.get(id.to_string()).eval(env, ast),
             Expr::Call(Call { func_name, args }) => {
                 if !ast.decls.contains_key(func_name) {
                     // panic!("Woland: undefined reference to {} procedure.", proc_name);
@@ -76,9 +84,9 @@ impl Expr {
 
                 match func_name.as_str() {
                     // TODO: This is a big hack to simulate std lib functions.
-                    "dump" => {
+                    "dmp" => {
                         if args.len() == 0 {
-                            panic!("Woland: dump takes at least one argument.")
+                            panic!("Woland: dmp takes at least one argument.")
                         }
                         println!(
                             "{:?}",
@@ -92,6 +100,40 @@ impl Expr {
                             .read_line(&mut buffer)
                             .expect("Woland: error reading from stdin. You are on your own.");
                         Prim::String(buffer)
+                    }
+                    "cmpI64" => {
+                        if args.len() != 2 {
+                            panic!("Woland: cmpI64 takes at least one argument.");
+                        }
+                        Prim::Bool(args[0].eval(env, ast) == args[1].eval(env, ast))
+                    }
+                    "addI64" => {
+                        if args.len() != 2 {
+                            panic!("Woland: addI64 takes at least one argument.");
+                        }
+                        if let Prim::I64(lhs) = args[0].eval(env, ast) {
+                            if let Prim::I64(rhs) = args[1].eval(env, ast) {
+                                Prim::I64(lhs + rhs)
+                            } else {
+                                panic!("Woland: TypeError: expected I64 in 2nd argument.")
+                            }
+                        } else {
+                            panic!("Woland: TypeError: expected I64 in 1st argument.")
+                        }
+                    }
+                    "modI64" => {
+                        if args.len() != 2 {
+                            panic!("Woland: modI64 takes at least one argument.");
+                        }
+                        if let Prim::I64(lhs) = args[0].eval(env, ast) {
+                            if let Prim::I64(rhs) = args[1].eval(env, ast) {
+                                Prim::I64(lhs % rhs)
+                            } else {
+                                panic!("Woland: TypeError: expected I64 in 2nd argument.")
+                            }
+                        } else {
+                            panic!("Woland: TypeError: expected I64 in 1st argument.")
+                        }
                     }
                     _ => {
                         let mut env: Env = Env::new();
@@ -127,24 +169,40 @@ impl Instr {
             Instr::Bind(Bind { id, ty: _, expr }) => {
                 env.names.insert(id.to_owned(), expr.to_owned());
             }
+            Instr::MutBind(Bind { id, ty: _, expr }) => {
+                env.vars.insert(id.to_owned(), expr.to_owned());
+            }
             Instr::Expr(expr) => {
                 // The evaluated expression may or may not have
                 // any side-effects. Beware!
                 expr.eval(env, ast);
             }
-            Instr::Cond(Cond { cond, fst, snd }) => match cond.eval(env, ast) {
-                Prim::Bool(b) => {
-                    if b {
-                        fst.iter().for_each(|i| i.execute(env, ast))
-                    } else {
-                        snd.iter().for_each(|i| i.execute(env, ast))
+            // Instr::Cond(Branch { cond, fst, snd }) => match cond.eval(env, ast) {
+            //     Prim::Bool(b) => {
+            //         if b {
+            //             fst.iter().for_each(|i| i.execute(env, ast))
+            //         } else {
+            //             snd.iter().for_each(|i| i.execute(env, ast))
+            //         }
+            //     }
+            //     _ => panic!("Woland: TypeError: expected Bool."),
+            // },
+            Instr::Branch(Branch { paths }) => {
+                for p in paths {
+                    match p.0.eval(env, ast) {
+                        Prim::Bool(b) => {
+                            if b {
+                                p.1.iter().for_each(|i| i.execute(env, ast));
+                                break;
+                            }
+                        }
+                        _ => panic!("Woland: TypeError: expected Bool."),
                     }
                 }
-                _ => panic!("Woland: TypeError: expected Bool."),
-            },
+            }
             Instr::Loop(loop_) => {
                 env.loops.push(loop_.to_owned());
-                while env.loops.len() != 0 {
+                while env.loops.last() == Some(loop_) {
                     env.to_owned()
                         .loops
                         .last()
@@ -160,7 +218,18 @@ impl Instr {
                         .pop()
                         .unwrap_or_else(|| panic!("Woland: can only break out of a loop."));
                 }
+                Keyword::Ellipsis => { /* Do nothing! This is a simple filler Instr */ }
             },
+            Instr::Assign(Assign { name, expr }) => {
+                if !env.vars.contains_key(name) {
+                    panic!("Woland: {} is not a mutable name.", name)
+                }
+                // Imperative assignment enforces strict evalation,
+                // otherwise we can't do simple Assign's such as
+                // i = @addI64 i 1
+                let rhs = expr.eval(env, ast);
+                env.vars.insert(name.to_owned(), Expr::Prim(rhs));
+            }
         }
     }
 }

@@ -41,6 +41,7 @@
       we include everything by "merging" the two `decls` fields.
 */
 use std::collections::HashMap;
+use std::fmt::{write, Display};
 use std::io;
 
 use crate::ast::*;
@@ -83,14 +84,16 @@ impl Expr {
                 };
 
                 match func_name.as_str() {
-                    // TODO: This is a big hack to simulate std lib functions.
+                    // HACK: This is a big hack to simulate std lib functions.
                     "dmp" => {
                         if args.len() == 0 {
                             panic!("Woland: dmp takes at least one argument.")
                         }
                         println!(
-                            "{:?}",
-                            args.iter().map(|a| a.eval(env, ast)).collect::<Vec<Prim>>()
+                            "{}",
+                            args.iter()
+                                .map(|a| a.eval(env, ast).to_string())
+                                .collect::<String>()
                         );
                         Prim::I64(0)
                     }
@@ -245,6 +248,16 @@ impl Func {
         match self.body.last().unwrap() {
             Instr::Expr(ret) => ret.eval(env, ast),
             _ => panic!("Woland: expected expression at function's end."),
+        }
+    }
+}
+
+impl Display for Prim {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Prim::I64(i) => write!(f, "{}", i),
+            Prim::Bool(b) => write!(f, "{}", b),
+            Prim::String(s) => write!(f, "{}", s),
         }
     }
 }

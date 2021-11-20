@@ -29,9 +29,11 @@ pub struct Kind {
 pub enum Instr {
     Expr(Expr),
     Bind(Bind),
-    Cond(Cond),
+    MutBind(Bind),
+    Branch(Branch),
     Keyword(Keyword),
     Loop(Loop),
+    Assign(Assign),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -64,10 +66,8 @@ pub struct Bind {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct Cond {
-    pub cond: Expr,
-    pub fst: Vec<Instr>,
-    pub snd: Vec<Instr>,
+pub struct Branch {
+    pub paths: Vec<(Expr, Vec<Instr>)>,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -78,5 +78,12 @@ pub struct Loop {
 #[derive(Debug, PartialEq, Clone)]
 pub enum Keyword {
     Break,
+    Ellipsis,
     // Instrinsic(String),
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct Assign {
+    pub name: String,
+    pub expr: Expr,
 }

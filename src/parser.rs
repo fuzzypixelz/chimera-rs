@@ -48,16 +48,15 @@
       loop  -> 'loop' expr 'do' body 'end'
 */
 
-use std::thread::LocalKey;
-
 use nom::{
     branch::alt,
-    bytes::complete::tag,
-    character::complete::{alpha1, alphanumeric1, char, i64, multispace0, newline, space0},
+    bytes::complete::{is_not, tag, take_until},
+    character::complete::{
+        alpha1, alphanumeric1, char, i64, multispace0, newline, none_of, space0,
+    },
     combinator::{into, opt, recognize, value, verify},
-    error::ParseError,
-    multi::{many0, many1},
-    sequence::{delimited, pair, separated_pair, terminated},
+    multi::{fold_many0, many0, many1},
+    sequence::{delimited, pair, preceded, separated_pair, terminated, tuple},
     IResult,
 };
 
@@ -102,8 +101,9 @@ fn kind(input: &str) -> IResult<&str, Kind> {
 fn instr(input: &str) -> IResult<&str, Instr> {
     let (input, result) = alt((
         terminated(into(expr), newline),
+        ws(assign),
         ws(bind),
-        into(ws(cond)),
+        into(ws(branch)),
         into(ws(loop_)),
         terminated(into(keyword), newline),
     ))(input)?;
@@ -116,9 +116,9 @@ impl From<Expr> for Instr {
     }
 }
 
-impl From<Cond> for Instr {
-    fn from(cond: Cond) -> Self {
-        Instr::Cond(cond)
+impl From<Branch> for Instr {
+    fn from(cond: Branch) -> Self {
+        Instr::Branch(cond)
     }
 }
 
@@ -136,7 +136,14 @@ impl From<Keyword> for Instr {
 
 fn expr(input: &str) -> IResult<&str, Expr> {
     // None of the alt inputs show consume multispace!
-    let (input, expr) = alt((prim, into(name), call))(input)?;
+    let (input, expr) = alt((
+        delimited(
+            ws(char('(')),
+            alt((ws(prim), into(ws(name)), ws(call), ws(string))),
+            char(')'),
+        ),
+        alt((prim, into(name), call, string)),
+    ))(input)?;
     let (input, _) = space0(input)?;
     Ok((input, expr))
 }
@@ -151,8 +158,8 @@ fn prim(input: &str) -> IResult<&str, Expr> {
     // let (input, int) = i64(input)?;
     let (input, prim) = alt((
         into::<&str, bool, Expr, nom::error::Error<&str>, _, _>(alt((
-            value(true, ws(tag("true"))),
-            value(false, ws(tag("false"))),
+            value(true, tag("true")),
+            value(false, tag("false")),
         ))),
         into::<&str, i64, Expr, nom::error::Error<&str>, _, _>(i64),
     ))(input)?;
@@ -177,7 +184,12 @@ fn name(input: &str) -> IResult<&str, &str> {
             alt((alpha1, tag("_"))),
             many0(alt((alphanumeric1, tag("_")))),
         )),
-        |s: &str| !vec!["let", "end", "true", "false", "if", "then", "else", "loop"].contains(&s),
+        |s: &str| {
+            !vec![
+                "let", "end", "true", "false", "if", "then", "else", "loop", "break",
+            ]
+            .contains(&s)
+        },
     )(input)
 }
 
@@ -209,29 +221,60 @@ fn call(input: &str) -> IResult<&str, Expr> {
 
 fn bind(input: &str) -> IResult<&str, Instr> {
     let (input, _) = ws(tag("let"))(input)?;
+    let (input, mutspec) = opt(ws(tag("mut")))(input)?;
     let (input, (id, ty)) = ws(name_typed)(input)?;
+    let (input, _) = alt((ws(tag("~")), ws(tag("="))))(input)?;
+    let (input, expr) = expr(input)?;
+    let (input, _) = newline(input)?;
+    let bind = Bind {
+        id: id.to_string(),
+        ty: ty.to_string(),
+        expr,
+    };
+    Ok((
+        input,
+        match mutspec {
+            Some(_) => Instr::MutBind(bind),
+            None => Instr::Bind(bind),
+        },
+    ))
+}
+
+fn assign(input: &str) -> IResult<&str, Instr> {
+    let (input, name) = ws(name)(input)?;
     let (input, _) = alt((ws(tag("~")), ws(tag("="))))(input)?;
     let (input, expr) = expr(input)?;
     let (input, _) = newline(input)?;
     Ok((
         input,
-        Instr::Bind(Bind {
-            id: id.to_string(),
-            ty: ty.to_string(),
+        Instr::Assign(Assign {
+            name: name.to_string(),
             expr,
         }),
     ))
 }
 
-fn cond(input: &str) -> IResult<&str, Cond> {
-    let (input, _) = ws(tag("if"))(input)?;
-    let (input, cond) = ws(expr)(input)?;
-    let (input, _) = ws(tag("then"))(input)?;
-    let (input, fst) = many1(ws(instr))(input)?;
-    let (input, _) = ws(tag("else"))(input)?;
-    let (input, snd) = many1(ws(instr))(input)?;
+fn branch(input: &str) -> IResult<&str, Branch> {
+    let (input, head) = pair(
+        preceded(ws(tag("if")), ws(expr)),
+        preceded(ws(tag("then")), many1(ws(instr))),
+    )(input)?;
+
+    let (input, mut middle) = many0(pair(
+        preceded(ws(tag("elsif")), ws(expr)),
+        preceded(ws(tag("then")), many1(ws(instr))),
+    ))(input)?;
+
+    let (input, last) = opt(preceded(ws(tag("else")), many1(ws(instr))))(input)?;
+
     let (input, _) = ws(tag("end"))(input)?;
-    Ok((input, Cond { cond, fst, snd }))
+
+    let mut paths = vec![head];
+    paths.append(&mut middle);
+    if let Some(is) = last {
+        paths.push((Expr::Prim(Prim::Bool(true)), is))
+    }
+    Ok((input, Branch { paths }))
 }
 
 fn loop_(input: &str) -> IResult<&str, Loop> {
@@ -246,17 +289,57 @@ fn keyword(input: &str) -> IResult<&str, Keyword> {
     // value(Keyword::Break, ws(tag("break"))),
     // value(Keyword::Whatever, ws(tag("whatever"))),
     // ))(input)?;
-    let (input, keyword) = value(Keyword::Break, ws(tag("break")))(input)?;
+    let (input, keyword) = alt((
+        value(Keyword::Break, tag("break")),
+        value(Keyword::Ellipsis, tag("...")),
+    ))(input)?;
     Ok((input, keyword))
 }
 
-fn ws<'a, F: 'a, O, E: ParseError<&'a str>>(
-    inner: F,
-) -> impl FnMut(&'a str) -> IResult<&'a str, O, E>
+fn string(input: &str) -> IResult<&str, Expr> {
+    let (input, string) = delimited(
+        char('"'),
+        fold_many0(none_of("\""), String::new, |mut acc, ch| {
+            acc.push(ch);
+            acc
+        }),
+        char('"'),
+    )(input)?;
+    Ok((input, Expr::Prim(Prim::String(string))))
+}
+
+// fn ws<'a, F: 'a, O, E: ParseError<&'a str>>(
+//     inner: F,
+// ) -> impl FnMut(&'a str) -> IResult<&'a str, O, E>
+// where
+//     F: Fn(&'a str) -> IResult<&'a str, O, E>,
+// {
+//     terminated(inner, whitespace)
+// }
+
+fn ws<'a, F: 'a, O>(inner: F) -> impl FnMut(&'a str) -> IResult<&'a str, O>
 where
-    F: Fn(&'a str) -> IResult<&'a str, O, E>,
+    F: Fn(&'a str) -> IResult<&'a str, O>,
 {
     terminated(inner, multispace0)
+}
+
+pub fn whitespace(i: &str) -> IResult<&str, ()> {
+    value((), many0(alt((eol_comment, value((), multispace0)))))(i)
+}
+
+pub fn eol_comment(i: &str) -> IResult<&str, ()> {
+    value(
+        (), // Output is thrown away.
+        pair(tag("//"), is_not("\n\r")),
+    )(i)
+}
+
+pub fn inline_comment(i: &str) -> IResult<&str, ()> {
+    value(
+        (), // Output is thrown away.
+        tuple((tag("/*"), take_until("*/"), tag("*/"))),
+    )(i)
 }
 
 #[cfg(test)]
@@ -295,12 +378,26 @@ mod tests {
     #[test]
     fn basic_bind() {
         assert_eq!(
-            bind("let number: I8 ~ 69\n"),
+            bind("let number: I8 = 69\n"),
             Ok((
                 "",
                 Instr::Bind(Bind {
                     id: "number".to_string(),
                     ty: "I8".to_string(),
+                    expr: Expr::Prim(I64(69))
+                })
+            ))
+        )
+    }
+
+    #[test]
+    fn basic_assign() {
+        assert_eq!(
+            assign("number = 69\n"),
+            Ok((
+                "",
+                Instr::Assign(Assign {
+                    name: "number".to_string(),
                     expr: Expr::Prim(I64(69))
                 })
             ))
@@ -455,30 +552,9 @@ mod tests {
     }
 
     #[test]
-    fn basic_cond() {
-        assert_eq!(
-            cond("if condition then\n @dump 1\n else\n @dump 0\n end"),
-            Ok((
-                "",
-                Cond {
-                    cond: Expr::Name("condition".to_string()),
-                    fst: vec![Instr::Expr(Expr::Call(Call {
-                        func_name: "dump".to_string(),
-                        args: vec![Expr::Prim(I64(1))]
-                    }))],
-                    snd: vec![Instr::Expr(Expr::Call(Call {
-                        func_name: "dump".to_string(),
-                        args: vec![Expr::Prim(I64(0))]
-                    }))],
-                }
-            ))
-        );
-    }
-
-    #[test]
     fn func_with_cond() {
         assert_eq!(
-            ast("let main: Void ~\n if condition then\n @dump 1\n else\n @dump 0\n end\n end"),
+            ast("let main: Void ~\n if condition1 then\n @dump 1\n elif condition2 then\n @dump 2\n else\n @dump 0\n end\n end"),
             Ok((
                 "",
                 AST {
@@ -489,17 +565,32 @@ mod tests {
                                 params: vec![],
                                 ret: "Void".to_string()
                             },
-                            body: vec![Instr::Cond(Cond {
-                                cond: Expr::Name("condition".to_string()),
-                                fst: vec![Instr::Expr(Expr::Call(Call {
-                                    func_name: "dump".to_string(),
-                                    args: vec![Expr::Prim(I64(1))]
-                                }))],
-                                snd: vec![Instr::Expr(Expr::Call(Call {
-                                    func_name: "dump".to_string(),
-                                    args: vec![Expr::Prim(I64(0))]
-                                }))],
-                            })],
+                            body: vec![Instr::Branch(Branch {
+                                paths: vec![
+                                    (
+                                        Expr::Name("condition1".to_string()),
+                                        vec![Instr::Expr(Expr::Call(Call {
+                                            func_name: "dump".to_string(),
+                                            args: vec![Expr::Prim(I64(1))]
+                                        }))]
+                                    ),
+                                    (
+                                        Expr::Name("condition2".to_string()),
+                                        vec![Instr::Expr(Expr::Call(Call {
+                                            func_name: "dump".to_string(),
+                                            args: vec![Expr::Prim(I64(2))]
+                                        }))]
+                                    ),
+                                    (
+                                        Expr::Prim(Bool(true)),
+                                        vec![Instr::Expr(Expr::Call(Call {
+                                            func_name: "dump".to_string(),
+                                            args: vec![Expr::Prim(I64(0))]
+                                        }))]
+                                    ),
+
+                                ]
+                            })]
                         })
                     )]
                     .into_iter()

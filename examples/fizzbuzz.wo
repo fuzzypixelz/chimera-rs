@@ -1,0 +1,20 @@
+let main: I64 ~
+  let mut i: I64 = 0
+  loop
+    i = @addI64 i 1
+    if @cmpI64 i 100
+      then break
+    end
+
+    if @cmpI64 0 (@modI64 i 15) 
+      then @dmp "FizzBuzz"
+    elsif @cmpI64 0 (@modI64 i 3)
+      then @dmp "Fizz"
+    elsif @cmpI64 0 (@modI64 i 5)
+      then @dmp "Buzz"
+    else
+      @dmp i
+    end
+  end      
+  0
+end

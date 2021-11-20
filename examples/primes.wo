@@ -1,0 +1,30 @@
+let main: I64 ~
+  let limit: I64 = 100
+  let mut i: I64 = 3
+  let mut j: I64 = 2
+
+  loop
+    j = 2
+    let mut prime: Bool = true
+    loop
+      if @cmpI64 (@modI64 i j) 0
+        then prime = false
+      end
+      
+      j = @addI64 j 1
+      if @cmpI64 j i
+        then break
+      end
+    end
+
+    if prime
+      then @dmp i
+    end
+
+    i = @addI64 i 1
+    if @cmpI64 i limit
+      then break
+    end
+  end
+  0
+end

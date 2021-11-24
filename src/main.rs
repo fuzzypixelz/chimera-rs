@@ -1,5 +1,6 @@
 mod ast;
 mod parser;
+mod typeck;
 mod woland;
 
 use std::env;
@@ -14,10 +15,10 @@ use nom::Finish;
     import core/io
     export ()
 
-    proc main -> Void is
+    let main: Void ~
       // The answer to life,
       // the universe and everything.
-      dump(42)
+      dmp 42
     end
 */
 

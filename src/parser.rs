@@ -75,27 +75,73 @@ pub fn ast(input: &str) -> IResult<&str, AST> {
 pub fn func(input: &str) -> IResult<&str, (String, Decl)> {
     let (input, _) = ws(tag("let"))(input)?;
     let (input, name) = ws(name)(input)?;
-    let (input, kind) = ws(kind)(input)?;
+    let (input, kind) = ws(sig)(input)?;
     let (input, _) = alt((ws(tag("~")), ws(tag("="))))(input)?;
     let (input, body) = many1(ws(instr))(input)?;
     let (input, _) = ws(tag("end"))(input)?;
-    Ok((input, (name.to_string(), Decl::Func(Func { kind, body }))))
+    Ok((input, (name.to_string(), Decl::Func(DFunc { kind, body }))))
 }
 
-fn kind(input: &str) -> IResult<&str, Kind> {
+fn sig(input: &str) -> IResult<&str, Sig> {
     let (input, _) = ws(char(':'))(input)?;
     let (input, params) = many0(terminated(ws(name_typed), ws(tag("->"))))(input)?;
     let (input, ret) = ws(name)(input)?;
     Ok((
         input,
-        Kind {
-            params: params
-                .iter()
-                .map(|(s, t)| (s.to_string(), t.to_string()))
-                .collect(),
+        Sig {
+            params: params.iter().map(|(s, _)| s.to_string()).collect(),
             ret: ret.to_string(),
         },
     ))
+}
+
+/*
+  FIXME: At the moment we don't know what exactly
+  is the type referring to (except for primitives.)
+    1. If it's a New(DType) then we would need to have
+       parsed the decleration before, the solution is
+       simply keeping it as a String for know and searching
+       for the DType once we're done.
+    2. If it's a Pure/Impure then we would need the symbol
+       at the end of the type to to be able to decide on the
+       two. Even if we peek at the rest of the input, we
+       wouldn't be able to to parse the rest directly into
+       a Type because of the above.
+    3. If it's a Var(Type) then we would need the symbol parsed
+       before in order to know this, the same problem in (2)
+       applies.
+
+  In conclusion, what we're parsing here is not the type because
+  we're missing more context, to keep the parser simple we will
+  introduce a `TAnn` notion for this, in order to only extract
+  information readily available at this point.
+
+*/
+pub enum TAnn {
+    Name(String),
+    Arrow((String, Box<TAnn>), Box<TAnn>),
+}
+
+fn type_(input: &str) -> IResult<&str, TAnn> {
+    let tann_name = |i: &str| {
+        let (i, ann) = ws(name)(i)?;
+        Ok((i, TAnn::Name(ann.to_string())))
+    };
+    let tann_arrow = |i: &str| {
+        let (i, ((param, ity), oty)) = delimited(
+            opt(ws(char('('))),
+            separated_pair(
+                separated_pair(name, ws(char(':')), type_),
+                ws(tag("->")),
+                type_,
+            ),
+            opt(ws(char(')'))),
+        )(i)?;
+        Ok((
+            i,
+            TAnn::Arrow((param.to_string(), Box::new(ity)), Box::new(oty)),
+        ))
+    };
 }
 
 fn instr(input: &str) -> IResult<&str, Instr> {
@@ -105,14 +151,14 @@ fn instr(input: &str) -> IResult<&str, Instr> {
         ws(bind),
         into(ws(branch)),
         into(ws(loop_)),
-        terminated(into(keyword), newline),
+        terminated(into(keyword), alt((newline, char(';')))),
     ))(input)?;
     Ok((input, result))
 }
 
 impl From<Expr> for Instr {
     fn from(expr: Expr) -> Self {
-        Instr::Expr(expr)
+        Instr::Compute(expr)
     }
 }
 
@@ -142,7 +188,13 @@ fn expr(input: &str) -> IResult<&str, Expr> {
             alt((ws(prim), into(ws(name)), ws(call), ws(string))),
             char(')'),
         ),
-        alt((prim, into(name), call, string)),
+        alt((
+            prim,
+            into(name),
+            call,
+            string,
+            value(Expr::Prim(Prim::Void), tag("()")),
+        )),
     ))(input)?;
     let (input, _) = space0(input)?;
     Ok((input, expr))
@@ -212,32 +264,25 @@ fn call(input: &str) -> IResult<&str, Expr> {
     let (input, args) = many0(terminated(expr, space0))(input)?;
     Ok((
         input,
-        Expr::Call(Call {
-            func_name: func.to_string(),
+        Expr::Apply(Apply {
+            name: func.to_string(),
             args: args,
         }),
     ))
 }
 
 fn bind(input: &str) -> IResult<&str, Instr> {
-    let (input, _) = ws(tag("let"))(input)?;
-    let (input, mutspec) = opt(ws(tag("mut")))(input)?;
+    let (input, _) = ws(tag("var"))(input)?;
     let (input, (id, ty)) = ws(name_typed)(input)?;
     let (input, _) = alt((ws(tag("~")), ws(tag("="))))(input)?;
     let (input, expr) = expr(input)?;
     let (input, _) = newline(input)?;
-    let bind = Bind {
+    let bind = Var {
         id: id.to_string(),
         ty: ty.to_string(),
         expr,
     };
-    Ok((
-        input,
-        match mutspec {
-            Some(_) => Instr::MutBind(bind),
-            None => Instr::Bind(bind),
-        },
-    ))
+    Ok((input, Instr::Bind(bind)))
 }
 
 fn assign(input: &str) -> IResult<&str, Instr> {
@@ -293,6 +338,7 @@ fn keyword(input: &str) -> IResult<&str, Keyword> {
         value(Keyword::Break, tag("break")),
         value(Keyword::Ellipsis, tag("...")),
     ))(input)?;
+    let (input, _) = space0(input)?;
     Ok((input, keyword))
 }
 
@@ -364,8 +410,8 @@ mod tests {
             instr("@dump 666 my_favourite_number\n"),
             Ok((
                 "",
-                Instr::Expr(Expr::Call(Call {
-                    func_name: "dump".to_string(),
+                Instr::Compute(Expr::Apply(Apply {
+                    name: "dump".to_string(),
                     args: vec![
                         Expr::Prim(I64(666)),
                         Expr::Name("my_favourite_number".to_string())
@@ -381,7 +427,7 @@ mod tests {
             bind("let number: I8 = 69\n"),
             Ok((
                 "",
-                Instr::Bind(Bind {
+                Instr::Bind(Var {
                     id: "number".to_string(),
                     ty: "I8".to_string(),
                     expr: Expr::Prim(I64(69))
@@ -412,10 +458,10 @@ mod tests {
     #[test]
     fn kind_no_args() {
         assert_eq!(
-            kind(": I64"),
+            sig(": I64"),
             Ok((
                 "",
-                Kind {
+                Sig {
                     params: vec![],
                     ret: "I64".to_string()
                 }
@@ -426,10 +472,10 @@ mod tests {
     #[test]
     fn kind_two_args() {
         assert_eq!(
-            kind(": (x: I64) -> (y: I64) -> I64"),
+            sig(": (x: I64) -> (y: I64) -> I64"),
             Ok((
                 "",
-                Kind {
+                Sig {
                     params: vec![
                         ("x".to_string(), "I64".to_string()),
                         ("y".to_string(), "I64".to_string())
@@ -448,12 +494,12 @@ mod tests {
                 "",
                 (
                     "main".to_string(),
-                    Decl::Func(Func {
-                        kind: Kind {
+                    Decl::Func(DFunc {
+                        kind: Sig {
                             params: vec![],
                             ret: "I32".to_string()
                         },
-                        body: vec![Instr::Expr(Expr::Prim(I64(-1)))],
+                        body: vec![Instr::Compute(Expr::Prim(I64(-1)))],
                     })
                 )
             ))
@@ -470,22 +516,22 @@ mod tests {
                     decls: vec![
                         (
                             "whatever".to_string(),
-                            Decl::Func(Func {
-                                kind: Kind {
+                            Decl::Func(DFunc {
+                                kind: Sig {
                                     params: vec![],
                                     ret: "I8".to_string()
                                 },
-                                body: vec![Instr::Expr(Expr::Prim(I64(0)))],
+                                body: vec![Instr::Compute(Expr::Prim(I64(0)))],
                             })
                         ),
                         (
                             "main".to_string(),
-                            Decl::Func(Func {
-                                kind: Kind {
+                            Decl::Func(DFunc {
+                                kind: Sig {
                                     params: vec![],
                                     ret: "I64".to_string()
                                 },
-                                body: vec![Instr::Expr(Expr::Prim(I64(-1)))],
+                                body: vec![Instr::Compute(Expr::Prim(I64(-1)))],
                             })
                         ),
                     ]
@@ -505,13 +551,13 @@ mod tests {
                 (AST {
                     decls: vec![(
                         "nothing".to_string(),
-                        Decl::Func(Func {
-                            kind: Kind {
+                        Decl::Func(DFunc {
+                            kind: Sig {
                                 params: vec![],
                                 ret: "Void".to_string()
                             },
-                            body: vec![Instr::Expr(Expr::Call(Call {
-                                func_name: "dump".to_string(),
+                            body: vec![Instr::Compute(Expr::Apply(Apply {
+                                name: "dump".to_string(),
                                 args: vec![Expr::Prim(I64(2021))]
                             }))],
                         })
@@ -532,12 +578,12 @@ mod tests {
                 AST {
                     decls: vec![(
                         "main".to_string(),
-                        Decl::Func(Func {
-                            kind: Kind {
+                        Decl::Func(DFunc {
+                            kind: Sig {
                                 params: vec![],
                                 ret: "Void".to_string()
                             },
-                            body: vec![Instr::Bind(Bind {
+                            body: vec![Instr::Bind(Var {
                                 id: "number".to_string(),
                                 ty: "I8".to_string(),
                                 expr: Expr::Prim(I64(42))
@@ -554,14 +600,17 @@ mod tests {
     #[test]
     fn func_with_cond() {
         assert_eq!(
-            ast("let main: Void ~\n if condition1 then\n @dump 1\n elif condition2 then\n @dump 2\n else\n @dump 0\n end\n end"),
+            ast("let main: Void ~\n 
+            if condition1 then\n @dump 1\n 
+            elsif condition2 then\n @dump 2\n 
+            else\n @dump 0\n end\n end"),
             Ok((
                 "",
                 AST {
                     decls: vec![(
                         "main".to_string(),
-                        Decl::Func(Func {
-                            kind: Kind {
+                        Decl::Func(DFunc {
+                            kind: Sig {
                                 params: vec![],
                                 ret: "Void".to_string()
                             },
@@ -569,26 +618,25 @@ mod tests {
                                 paths: vec![
                                     (
                                         Expr::Name("condition1".to_string()),
-                                        vec![Instr::Expr(Expr::Call(Call {
-                                            func_name: "dump".to_string(),
+                                        vec![Instr::Compute(Expr::Apply(Apply {
+                                            name: "dump".to_string(),
                                             args: vec![Expr::Prim(I64(1))]
                                         }))]
                                     ),
                                     (
                                         Expr::Name("condition2".to_string()),
-                                        vec![Instr::Expr(Expr::Call(Call {
-                                            func_name: "dump".to_string(),
+                                        vec![Instr::Compute(Expr::Apply(Apply {
+                                            name: "dump".to_string(),
                                             args: vec![Expr::Prim(I64(2))]
                                         }))]
                                     ),
                                     (
                                         Expr::Prim(Bool(true)),
-                                        vec![Instr::Expr(Expr::Call(Call {
-                                            func_name: "dump".to_string(),
+                                        vec![Instr::Compute(Expr::Apply(Apply {
+                                            name: "dump".to_string(),
                                             args: vec![Expr::Prim(I64(0))]
                                         }))]
                                     ),
-
                                 ]
                             })]
                         })
@@ -607,8 +655,8 @@ mod tests {
             Ok((
                 "",
                 Loop {
-                    body: vec![Instr::Expr(Expr::Call(Call {
-                        func_name: "dump".to_string(),
+                    body: vec![Instr::Compute(Expr::Apply(Apply {
+                        name: "dump".to_string(),
                         args: vec![Expr::Prim(I64(42))]
                     }))]
                 }

@@ -1,0 +1,24 @@
+let dmp: Forall A => (x: A) -> Void
+~
+  intrinsic "dmp"
+end
+
+let read: String
+~
+  intrinsic "read"
+end
+
+let addI64: (x: I64) -> (y: I64) -> I64
+=
+  intrinsic "addI64"
+end
+
+let modI64: (x: I64) -> (y: I64) -> I64
+=
+  intrinsic "modI64"
+end
+
+let cmpI64: (x: I64) -> (y: I64) -> Bool
+=
+  intrinsic "cmpI64"
+end

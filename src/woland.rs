@@ -40,49 +40,52 @@
       only the `decls` presents in its exports section, otheriwse
       we include everything by "merging" the two `decls` fields.
 */
+use rustc_hash::FxHashMap;
 use std::collections::HashMap;
-use std::fmt::{write, Display};
-use std::io;
+use std::fmt::Display;
+use std::io::{self, Read};
 
 use crate::ast::*;
 
 #[derive(Clone)]
 pub struct Env {
-    names: HashMap<String, Expr>,
-    vars: HashMap<String, Expr>,
-    loops: Vec<Loop>,
+    names: FxHashMap<String, Decl>,
+    vars: FxHashMap<String, Expr>,
+    loops: u64,
 }
 
 impl Env {
     pub fn new() -> Self {
         Self {
-            names: HashMap::new(),
-            vars: HashMap::new(),
-            loops: vec![],
+            names: FxHashMap::default(),
+            vars: FxHashMap::default(),
+            loops: 0,
         }
     }
 
-    pub fn get(&self, item: String) -> Expr {
-        match self.names.get(&item) {
-            None => match self.vars.get(&item) {
+    pub fn get(&self, item: &String) -> &Expr {
+        match self.names.get(item) {
+            None => match self.vars.get(item) {
                 None => panic!("Woland: undefined reference to {} name.", item),
-                Some(e) => e.to_owned(),
+                Some(e) => e,
             },
-            Some(e) => e.to_owned(),
+            Some(e) => e,
         }
     }
 }
 
 impl Expr {
-    fn eval<'a>(&'a self, env: &'a Env, ast: &AST) -> Prim {
+    fn eval<'a>(&'a self, env: &'a Env, ast: &'a AST) -> Expr {
         match self {
-            Expr::Prim(prim) => prim.to_owned(),
-            Expr::Name(id) => env.get(id.to_string()).eval(env, ast),
-            Expr::Call(Call { func_name, args }) => {
-                if !ast.decls.contains_key(func_name) {
-                    // panic!("Woland: undefined reference to {} procedure.", proc_name);
-                };
-
+            Expr::Prim(prim) => Expr::Prim(prim.to_owned()),
+            Expr::Name(id) => env.get(id).eval(env, ast),
+            Expr::Apply(Apply {
+                name: func_name,
+                args,
+            }) => {
+                // if !ast.decls.contains_key(func_name) {
+                // panic!("Woland: undefined reference to {} procedure.", proc_name);
+                // };
                 match func_name.as_str() {
                     // HACK: This is a big hack to simulate std lib functions.
                     "dmp" => {
@@ -95,28 +98,29 @@ impl Expr {
                                 .map(|a| a.eval(env, ast).to_string())
                                 .collect::<String>()
                         );
-                        Prim::I64(0)
+                        Expr::Prim(Prim::I64(0))
                     }
                     "read" => {
                         let mut buffer = String::new();
                         io::stdin()
-                            .read_line(&mut buffer)
+                            .read_to_string(&mut buffer)
+                            // .read_line(&mut buffer)
                             .expect("Woland: error reading from stdin. You are on your own.");
-                        Prim::String(buffer)
+                        Expr::Prim(Prim::String(buffer))
                     }
                     "cmpI64" => {
                         if args.len() != 2 {
                             panic!("Woland: cmpI64 takes at least one argument.");
                         }
-                        Prim::Bool(args[0].eval(env, ast) == args[1].eval(env, ast))
+                        Expr::Prim(Prim::Bool(args[0].eval(env, ast) == args[1].eval(env, ast)))
                     }
                     "addI64" => {
                         if args.len() != 2 {
                             panic!("Woland: addI64 takes at least one argument.");
                         }
-                        if let Prim::I64(lhs) = args[0].eval(env, ast) {
-                            if let Prim::I64(rhs) = args[1].eval(env, ast) {
-                                Prim::I64(lhs + rhs)
+                        if let Expr::Prim(Prim::I64(lhs)) = args[0].eval(env, ast) {
+                            if let Expr::Prim(Prim::I64(rhs)) = args[1].eval(env, ast) {
+                                Expr::Prim(Prim::I64(lhs + rhs))
                             } else {
                                 panic!("Woland: TypeError: expected I64 in 2nd argument.")
                             }
@@ -128,9 +132,9 @@ impl Expr {
                         if args.len() != 2 {
                             panic!("Woland: modI64 takes at least one argument.");
                         }
-                        if let Prim::I64(lhs) = args[0].eval(env, ast) {
-                            if let Prim::I64(rhs) = args[1].eval(env, ast) {
-                                Prim::I64(lhs % rhs)
+                        if let Expr::Prim(Prim::I64(lhs)) = args[0].eval(env, ast) {
+                            if let Expr::Prim(Prim::I64(rhs)) = args[1].eval(env, ast) {
+                                Expr::Prim(Prim::I64(lhs % rhs))
                             } else {
                                 panic!("Woland: TypeError: expected I64 in 2nd argument.")
                             }
@@ -169,31 +173,21 @@ impl Expr {
 impl Instr {
     fn execute(&self, env: &mut Env, ast: &AST) {
         match self {
-            Instr::Bind(Bind { id, ty: _, expr }) => {
-                env.names.insert(id.to_owned(), expr.to_owned());
-            }
-            Instr::MutBind(Bind { id, ty: _, expr }) => {
+            Instr::Bind(Var { id, ty: _, expr }) => {
                 env.vars.insert(id.to_owned(), expr.to_owned());
             }
-            Instr::Expr(expr) => {
+            Instr::Decl(decl) => {
+                env.names.insert(id.to_owned(), expr.to_owned());
+            }
+            Instr::Compute(expr) => {
                 // The evaluated expression may or may not have
                 // any side-effects. Beware!
                 expr.eval(env, ast);
             }
-            // Instr::Cond(Branch { cond, fst, snd }) => match cond.eval(env, ast) {
-            //     Prim::Bool(b) => {
-            //         if b {
-            //             fst.iter().for_each(|i| i.execute(env, ast))
-            //         } else {
-            //             snd.iter().for_each(|i| i.execute(env, ast))
-            //         }
-            //     }
-            //     _ => panic!("Woland: TypeError: expected Bool."),
-            // },
             Instr::Branch(Branch { paths }) => {
                 for p in paths {
                     match p.0.eval(env, ast) {
-                        Prim::Bool(b) => {
+                        Expr::Prim(Prim::Bool(b)) => {
                             if b {
                                 p.1.iter().for_each(|i| i.execute(env, ast));
                                 break;
@@ -204,25 +198,22 @@ impl Instr {
                 }
             }
             Instr::Loop(loop_) => {
-                env.loops.push(loop_.to_owned());
-                while env.loops.last() == Some(loop_) {
-                    env.to_owned()
-                        .loops
-                        .last()
-                        .unwrap()
-                        .body
-                        .iter()
-                        .for_each(|i| i.execute(env, ast))
+                env.loops += 1;
+                let start = env.loops;
+                while env.loops == start {
+                    loop_.body.iter().for_each(|i| i.execute(env, ast))
                 }
             }
             Instr::Keyword(keyword) => match keyword {
                 Keyword::Break => {
-                    env.loops
-                        .pop()
-                        .unwrap_or_else(|| panic!("Woland: can only break out of a loop."));
+                    if env.loops == 0 {
+                        panic!("Woland: can only break out of a loop.")
+                    }
+                    env.loops -= 1;
                 }
                 Keyword::Ellipsis => { /* Do nothing! This is a simple filler Instr */ }
             },
+
             Instr::Assign(Assign { name, expr }) => {
                 if !env.vars.contains_key(name) {
                     panic!("Woland: {} is not a mutable name.", name)
@@ -230,15 +221,15 @@ impl Instr {
                 // Imperative assignment enforces strict evalation,
                 // otherwise we can't do simple Assign's such as
                 // i = @addI64 i 1
-                let rhs = expr.eval(env, ast);
-                env.vars.insert(name.to_owned(), Expr::Prim(rhs));
+                // let rhs = expr.eval(env, ast);
+                env.vars.insert(name.to_owned(), expr.eval(env, ast));
             }
         }
     }
 }
 
-impl Func {
-    pub fn run<'a>(&'a self, env: &'a mut Env, ast: &AST) -> Prim {
+impl DFunc {
+    pub fn run<'a>(&'a self, env: &'a mut Env, ast: &'a AST) -> Expr {
         if self.body.len() == 0 {
             panic!("Woland: empty function body.");
         }
@@ -246,7 +237,7 @@ impl Func {
             instr.execute(env, ast);
         }
         match self.body.last().unwrap() {
-            Instr::Expr(ret) => ret.eval(env, ast),
+            Instr::Compute(ret) => ret.eval(env, ast),
             _ => panic!("Woland: expected expression at function's end."),
         }
     }
@@ -262,21 +253,30 @@ impl Display for Prim {
     }
 }
 
+impl Display for Expr {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Expr::Prim(p) => write!(f, "{}", p),
+            other => write!(f, "{:?}", other),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use Prim::*;
 
     #[test]
-    fn eval_prim_I64() {
+    fn eval_prim_i64() {
         assert_eq!(
             Expr::Prim(I64(0)).eval(
                 &Env::new(),
                 &AST {
-                    decls: HashMap::new()
+                    decls: HashMap::default()
                 }
             ),
-            I64(0)
+            Expr::Prim(I64(0))
         );
     }
 }

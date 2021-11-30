@@ -1,4 +1,4 @@
-let dmp: Forall A => (x: A) -> Void
+let dump: Forall A => (x: A) -> Void
 ~
   intrinsic "dmp"
 end

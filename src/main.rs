@@ -1,15 +1,10 @@
-mod ast;
-mod parser;
-mod typeck;
-mod woland;
-
 use std::env;
 use std::fs;
 
-use crate::ast::Decl;
-use crate::parser::ast;
-use crate::woland::Env;
-use nom::Finish;
+use common::Decl;
+use parser::run;
+use typechecker::Ctx;
+use anyhow::Result;
 
 /*
     import core/io
@@ -21,18 +16,24 @@ use nom::Finish;
       dmp 42
     end
 */
-
-fn main() {
+fn main() -> Result<()> {
     let filename = env::args()
         .nth(1)
         .expect("Woland: no source file was specified.");
     let source = fs::read_to_string(filename)
         .expect("Woland: error reading source file. You are on your own.");
-    let (_, program) = ast(&source).finish().unwrap();
+    let program = run(&source);
+    let ctx = Ctx::new(&program);
+    for d in &program.decls {
+        if let Decl::Func(dfunc) = d {
+            ctx.check(dfunc)?;
+        }
+    }
     // println!("Executing:\n{:?}\n", program);
-    let Decl::Func(entry) = &program
-        .decls
-        .get(&String::from("main"))
-        .expect("Woland: the main function was never declared.");
-    entry.run(&mut Env::new(), &program);
+    // let Decl::Func(entry) = &program
+    //     .decls
+    //     .get(&String::from("main"))
+    //     .expect("Woland: the main function was never declared.");
+    // entry.run(&mut Env::new(), &program);
+    Ok(())
 }

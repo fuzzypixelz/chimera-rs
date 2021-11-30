@@ -1,0 +1,160 @@
+use common::*;
+
+use crate::lexer::{Tok, LexicalError};
+
+grammar<'input>(input: &'input str);
+
+pub AST: AST = {
+    <Decl+> => AST { decls: <> },
+};
+
+pub Decl: Decl = {
+    <DType> => Decl::Type(<>),
+    <DFunc> => Decl::Func(<>),
+};
+
+pub DType: DType = {
+    Type <n: Name> <ps: Name*> NL<Equal> <b: TBody>
+    => DType { name: n, params: ps, body: b }
+};
+
+TBody: Vec<DConstr> = {
+    <DConstr> => vec![<>],
+    <Many2<DConstr>> NL<End>
+};
+
+DConstr: DConstr = {
+    <n: Name> <r: Record?> Newline => {
+        DConstr { name: n, record: r }
+    }
+};
+
+Record: Vec<(String, Ann)> = {
+    LBrack <SepList1<AName, Comma>> RBrack
+};
+
+// Annotated name; no parameters
+AName: (String, Ann) = {
+    <n: Name> Colon <a: Ann> => (n, a)
+}
+
+pub DFunc: DFunc = {
+    <DFuncLine>,
+    <DFuncMulti>
+};
+
+DFuncMulti: DFunc = {
+    Let <n: Name> <ps: Name*> Colon <a: Ann> 
+    <op: AssignOP> Newline <b: Instr+> NL<End>
+    => DFunc {name: n, params: ps, ann: a, op, body: b}
+};
+
+DFuncLine: DFunc = {
+    Let <n: Name> <ps: Name*> Colon <a: Ann> 
+    <op: AssignOP> <b: Expr> Newline
+    => DFunc { name: n, params: ps, ann: a, op, 
+        body: vec![Instr::Compute(b)]
+    }
+};
+
+Ann: Ann = {
+    SepList1<Name, Arrow>
+};
+
+AssignOP: AssignOP = {
+    Equal => AssignOP::Equal,
+    Tilde => AssignOP::Tilde
+};
+
+Instr: Instr = {
+    <Expr> Newline => Instr::Compute(<>),
+    <DFunc> => Instr::Declare(<>),
+    <n: Name> <op: AssignOP> <e: Expr> Newline => Instr::Assign
+        {name: n, op, expr: e}
+};
+
+Expr: Expr = {
+    NApply,
+    Apply
+};
+
+// Not a function application
+NApply: Expr = {
+    LParen RParen => Expr::Lit(Lit::Void),
+    <Boolean>     => Expr::Lit(Lit::Bool(<>)),
+    <I64>         => Expr::Lit(Lit::I64(<>)),
+    <Name>        => Expr::Name(<>),
+    LParen <Expr> RParen,
+};
+
+Apply: Expr = {
+    <l: Apply> <r: NApply>  => Expr::Apply { left: Box::new(l), right: Box::new(r) },
+    <l: NApply> <r: NApply> => Expr::Apply { left: Box::new(l), right: Box::new(r) },
+};
+
+
+I64:  i64    = <"I64">  => match <> {
+    Tok::IntLiteral(i)  => i,
+    _ => panic!("unreacheable")
+};
+
+Boolean: bool = {
+    True  => true,
+    False => false
+};
+
+Name: String = <"name"> => <>.to_string();
+OP:   String = <"OP">   => <>.to_string();
+
+NL<T>: T     = <T> Newline?;
+
+SepList1<T, S>: Vec<T> = {
+    <mut v: (<T> S)*> <e: T> => { v.push(e); v }
+};
+
+Many2<T>: Vec<T> = {
+    <mut v: T+> <e: T> => { v.push(e); v }
+};
+
+extern {
+    type Location = usize;
+    type Error = LexicalError;
+    
+    enum Tok<'input> {
+        "name"   => Tok::Name(<&'input str>),
+        "OP"     => Tok::Operator(<&'input str>),
+
+        "I64"    => Tok::IntLiteral(i64),
+
+        Ellipsis => Tok::Ellipsis,
+
+        Let      => Tok::Let,
+        End      => Tok::End,
+        Type     => Tok::Type,
+
+        True     => Tok::True,
+        False    => Tok::False,
+        If       => Tok::If,
+        Then     => Tok::Then,
+        Elif     => Tok::Elif,
+        Else     => Tok::Else,
+
+        Loop     => Tok::Loop,
+
+        Break    => Tok::Break,
+
+        Colon    => Tok::Colon,
+        Arrow    => Tok::Arrow,
+        Pipe     => Tok::Pipe,
+        Comma    => Tok::Comma,
+        Equal    => Tok::Equal,
+        Tilde    => Tok::Tilde,
+
+        LParen   => Tok::LParen,
+        RParen   => Tok::RParen,
+        LBrack   => Tok::LBrack,
+        RBrack   => Tok::RBrack,
+
+        Newline  => Tok::Newline
+    }
+}

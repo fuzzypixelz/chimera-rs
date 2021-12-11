@@ -191,7 +191,7 @@ impl Ctx {
     fn check_one(ctx: &mut Self, instr: &Instr) -> Result<Type, TypeError> {
         match instr {
             Instr::Compute(expr) => ctx.type_of(expr),
-            Instr::Bind { name, ann, op: _, expr } => {
+            Instr::Var { name, ann, op: _, expr } => {
                 let expected = ctx.type_from_any(ann)?;
                 let found = ctx.type_of(expr)?;
                 if expected == found  {
@@ -265,7 +265,7 @@ impl Ctx {
                         ctx.type_from_any(&dname.ann)?,
                     );
                 }
-                if let Instr::Bind { name, ann, op: _, expr: _ } = i {
+                if let Instr::Var { name, ann, op: _, expr: _ } = i {
                     ctx.names.insert(
                         name.to_string(),
                         ctx.type_from_any(ann)?,

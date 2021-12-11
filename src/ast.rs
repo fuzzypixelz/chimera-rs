@@ -49,7 +49,7 @@ pub enum Instr {
     // Create a name in the local environement that maps to a
     // mutable value. An Assign Instr allows this change.
     // NOTE: Obviously this is only allowed in impure functions.
-    Bind {
+    Var {
         name: String,
         ann: Ann,
         op: AOP,

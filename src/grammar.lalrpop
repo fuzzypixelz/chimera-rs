@@ -70,7 +70,7 @@ Intrinsic: Expr = {
 
 Bind: Instr = {
     Var <an: AName> <op: AOP> <e: Expr> Newline
-    => Instr::Bind {name: an.0, ann: an.1, op, expr: e}
+    => Instr::Var {name: an.0, ann: an.1, op, expr: e}
 };
 
 Assign: Instr = {

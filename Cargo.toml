@@ -4,4 +4,11 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-nom = "7.0.0"
+anyhow = "1.0.35"
+thiserror = "1.0.30"
+lalrpop-util = "0.19.6"
+phf = { version = "0.10.0", features = ["macros"] }
+rustc-hash = "1.1.0"
+
+[build-dependencies]
+lalrpop = "0.19.6"

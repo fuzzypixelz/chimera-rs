@@ -1,9 +1,20 @@
+mod lexer;
+mod ast;
+mod typechecker;
+mod error;
+mod interpreter;
+
+#[macro_use]
+extern crate lalrpop_util;
+lalrpop_mod!(pub grammar);
+
 use std::env;
 use std::fs;
 
-use common::Decl;
-use parser::run;
+use ast::*;
+use lexer::Lexer;
 use typechecker::Ctx;
+use interpreter::Env;
 use anyhow::Result;
 
 /*
@@ -20,20 +31,30 @@ fn main() -> Result<()> {
     let filename = env::args()
         .nth(1)
         .expect("Woland: no source file was specified.");
-    let source = fs::read_to_string(filename)
+    let source = fs::read_to_string(filename.to_owned())
         .expect("Woland: error reading source file. You are on your own.");
-    let program = run(&source);
-    let ctx = Ctx::new(&program);
-    for d in &program.decls {
-        if let Decl::Func(dfunc) = d {
-            ctx.check(dfunc)?;
+    let lexer = Lexer::new(&source);
+    let program = grammar::ASTParser::new()
+        .parse(&source, lexer)
+        .unwrap();
+    // print!("Woland is executing:\n{}", program);
+    let ctx = Ctx::new(&program)?;
+    for d in &program.defs {
+        if let Def::Name(dname) = d {
+            ctx.check(dname)?;
         }
     }
-    // println!("Executing:\n{:?}\n", program);
-    // let Decl::Func(entry) = &program
-    //     .decls
-    //     .get(&String::from("main"))
-    //     .expect("Woland: the main function was never declared.");
-    // entry.run(&mut Env::new(), &program);
+    let env = Env::new(&program);
+    let entry = env
+        .get(&String::from("main"))
+        .to_owned();
+        // .expect("Woland: the main function was never declared.");
+    
+    let main = Expr::Apply { 
+        left: Box::new(entry), 
+        // TODO: put all of argv into here!
+        right: Box::new(Expr::Str(filename))
+    };
+    main.eval(&env);
     Ok(())
 }

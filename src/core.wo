@@ -1,24 +1,20 @@
-let dump: Forall A => (x: A) -> Void
-~
-  intrinsic "dmp"
+let dump: Forall A => (x: A) -> Void ~
+  intrinsic "dump"
 end
 
-let read: String
-~
+let read: String ~
   intrinsic "read"
 end
 
-let addI64: (x: I64) -> (y: I64) -> I64
-=
-  intrinsic "addI64"
+let (+) x y: I64 -> I64 -> I64 =
+  (instrinsic "addI64") x
 end
 
-let modI64: (x: I64) -> (y: I64) -> I64
-=
-  intrinsic "modI64"
+let (==) x y: I64 -> I64 -> I64 =
+  (instrinsic "cmpI64") x
 end
 
-let cmpI64: (x: I64) -> (y: I64) -> Bool
-=
-  intrinsic "cmpI64"
+let (%) x y: I64 -> I64 -> I64 =
+  (instrinsic "modI64") x
 end
+

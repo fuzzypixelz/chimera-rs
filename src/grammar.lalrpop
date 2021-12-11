@@ -1,0 +1,190 @@
+use crate::ast::*;
+use crate::lexer::{Tok, LexicalError};
+
+use rustc_hash::FxHashMap;
+
+grammar<'input>(input: &'input str);
+
+pub AST: AST = {
+    <Def+> => AST { defs: <> },
+};
+
+pub Def: Def = {
+    <DType> => Def::Type(<>),
+    <DName> => Def::Name(<>),
+};
+
+pub DType: DType = {
+    Type <n: Name> <ps: Name*> NL<Equal> <b: TBody>
+    => DType { name: n, params: ps, body: b }
+};
+
+TBody: Vec<DConstr> = {
+    <DConstr> => vec![<>],
+    <Many2<DConstr>> NL<End>
+};
+
+DConstr: DConstr = {
+    <n: Name> <r: Record?> Newline => {
+        DConstr { name: n, record: r }
+    }
+};
+
+Record: Vec<(String, Ann)> = {
+    LBrack <SepList1<AName, Comma>> RBrack
+};
+
+// Annotated name; no parameters
+AName: (String, Ann) = {
+    <n: Name> Colon <a: Ann> => (n, a)
+};
+
+DName: DName = {
+    Let <an: AName> <op: AOP> <e: Expr> Newline
+    => DName {name: an.0, ann: an.1, op, expr: e}
+};
+
+Ann: Ann = {
+    SepList1<Name, Arrow>
+};
+
+AOP: AOP = {
+    Equal => AOP::Equal,
+    Tilde => AOP::Tilde
+};
+
+Instr: Instr = {
+    <DName>           => Instr::Let(<>),
+    <Expr> Newline    => Instr::Compute(<>),
+    <Keyword> Newline => Instr::Keyword(<>),
+    <Bind>,
+    <Branch>,
+    <Assign>,
+    NL<Loop> <b: Instr+> NL<End> => Instr::Loop { body: b },
+};
+
+Intrinsic: Expr = {
+    At <n: Name> <es: NApply*>
+    => Expr::Intrinsic { name: n, args: es }
+};
+
+Bind: Instr = {
+    Var <an: AName> <op: AOP> <e: Expr> Newline
+    => Instr::Bind {name: an.0, ann: an.1, op, expr: e}
+};
+
+Assign: Instr = {
+    <n: Name> <op: AOP> <e: Expr> Newline
+    => Instr::Assign {name: n, op, expr: e}
+};
+
+Branch: Instr = {
+    If <e: Expr> NL<Then> <b1: Instr+> <b2: (NL<Else> <Instr+>)?> NL<End>
+    => { 
+        let b2 = match b2 {
+            None    => vec![Instr::Keyword(Keyword::Ellipsis)],
+            Some(v) => v
+        };
+        Instr::Branch { paths: vec![(e, b1), (Expr::Bool(true), b2)] }
+    }
+};
+
+Expr: Expr = {
+    NApply,
+    Apply,
+    Intrinsic
+};
+
+// Not a function application
+NApply: Expr = {
+    LParen RParen => Expr::Void,
+    <Boolean>     => Expr::Bool(<>),
+    <I64>         => Expr::I64(<>),
+    <Name>        => Expr::Name(<>),
+    <Func>,
+    LParen <Expr> RParen,
+};
+
+Apply: Expr = {
+    <l: Apply> <r: NApply>  => Expr::Apply { left: Box::new(l), right: Box::new(r) },
+    <l: NApply> <r: NApply> => Expr::Apply { left: Box::new(l), right: Box::new(r) },
+};
+
+Func: Expr = {
+    Do Pipe <p: Name> NL<Pipe> <b: Instr+> End
+    => Expr::Func { param: p, body: b, closure: FxHashMap::default() }
+};
+
+Keyword: Keyword = {
+    Ellipsis            => Keyword::Ellipsis, 
+    Break               => Keyword::Break,
+};
+
+I64: i64 = <"I64"> => match <> {
+    Tok::IntLiteral(i)  => i,
+    _ => panic!("unreacheable")
+};
+
+Boolean: bool = {
+    True  => true,
+    False => false
+};
+
+Name: String = <"name"> => <>.to_string();
+OP:   String = <"OP">   => <>.to_string();
+
+NL<T>: T     = <T> Newline?;
+
+SepList1<T, S>: Vec<T> = {
+    <mut v: (<T> S)*> <e: T> => { v.push(e); v }
+};
+
+Many2<T>: Vec<T> = {
+    <mut v: T+> <e: T> => { v.push(e); v }
+};
+
+extern {
+    type Location = usize;
+    type Error = LexicalError;
+    
+    enum Tok<'input> {
+        "name"    => Tok::Name(<&'input str>),
+        "OP"      => Tok::Operator(<&'input str>),
+
+        "I64"     => Tok::IntLiteral(i64),
+
+        Ellipsis  => Tok::Ellipsis,
+        At        => Tok::At,
+
+        Let       => Tok::Let,
+        Do        => Tok::Do,
+        End       => Tok::End,
+        Var       => Tok::Var,
+        Type      => Tok::Type,
+
+        True      => Tok::True,
+        False     => Tok::False,
+        If        => Tok::If,
+        Then      => Tok::Then,
+        Elif      => Tok::Elif,
+        Else      => Tok::Else,
+
+        Loop      => Tok::Loop,
+
+        Break     => Tok::Break,
+
+        Colon     => Tok::Colon,
+        Arrow     => Tok::Arrow,
+        Pipe      => Tok::Pipe,
+        Comma     => Tok::Comma,
+        Equal     => Tok::Equal,
+        Tilde     => Tok::Tilde,
+
+        LParen    => Tok::LParen,
+        RParen    => Tok::RParen,
+        LBrack    => Tok::LBrack,
+        RBrack    => Tok::RBrack,
+
+        Newline   => Tok::Newline
+    }
+}

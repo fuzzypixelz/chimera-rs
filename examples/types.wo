@@ -1,0 +1,5 @@
+type Color = RGB { r: I64, g: I64, b: I64 }
+
+let main: Void -> I64 ~ do |_|
+    0
+end

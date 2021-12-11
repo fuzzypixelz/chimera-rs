@@ -1,30 +1,29 @@
-let main: I64 ~
-  let limit: I64 = 100
-  let mut i: I64 = 3
-  let mut j: I64 = 2
-
+let isPrime: I64 -> Bool = do |n|
+  @typeck_ignore
+  var prime: Bool = true
+  var i: I64 = 2
   loop
-    j = 2
-    let mut prime: Bool = true
-    loop
-      if @cmpI64 (@modI64 i j) 0
-        then prime = false
-      end
-      
-      j = @addI64 j 1
-      if @cmpI64 j i
-        then break
-      end
+    if @cmp i n then 
+      break
     end
-
-    if prime
-      then @dmp i
+    if @cmp (@mod n i) 0 then
+      prime = false
     end
-
-    i = @addI64 i 1
-    if @cmpI64 i limit
-      then break
-    end
+    i = @add i 1
   end
-  0
+  prime
+end
+
+let main: String -> Void ~ do |argv|
+  @typeck_ignore
+  var i: I64 = 2
+  loop
+    if @cmp i 1000 then
+      break
+    end
+    if isPrime i then
+      @dump i
+    end
+    i = @add i 1
+  end
 end

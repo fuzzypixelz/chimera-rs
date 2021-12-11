@@ -1,3 +1,4 @@
-let main: Void ~
-  @dump 42
+let main: I64 ~
+  @dmp "The answer to Life,"
+  @dmp "The Universe and Everything: " 42
 end

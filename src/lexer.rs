@@ -6,6 +6,7 @@ pub enum Tok<'input> {
     Operator(&'input str),
 
     IntLiteral(i64),
+    StrLiteral(&'input str),
 
     Ellipsis,
     At,
@@ -139,6 +140,13 @@ impl<'input> Lexer<'input> {
         let int = i64::from_str(src).unwrap();
         Ok((start, Tok::IntLiteral(int), end))
     }
+
+    fn string(&mut self, start: usize) -> Spanned<'input> {
+        self.chars.next(); // Consume the opening double quotes.
+        let (end, src) = self.take_while(start + 1, |b| b != '"');
+        self.chars.next(); // Consume the ending double quotes.
+        Ok((start, Tok::StrLiteral(src), end + 1))
+    }
 }
 
 impl<'input> Iterator for Lexer<'input> {
@@ -161,6 +169,7 @@ impl<'input> Iterator for Lexer<'input> {
                 // this in the language.
                 c if c.is_numeric() => Some(self.integer(start)),
                 c if c.is_alphabetic() || c == '_' => Some(self.name(start)),
+                '"' => Some(self.string(start)),
                 '#' => {
                     self.take_while(start, |c| c != '\n');
                     self.chars.next(); // Also consume the newline

@@ -63,6 +63,10 @@ Instr: Instr = {
     NL<Loop> <b: Instr+> NL<End> => Instr::Loop { body: b },
 };
 
+Block: Vec<Instr> = {
+
+};
+
 Intrinsic: Expr = {
     At <n: Name> <es: NApply*>
     => Expr::Intrinsic { name: n, args: es }
@@ -101,6 +105,7 @@ NApply: Expr = {
     <Boolean>     => Expr::Bool(<>),
     <I64>         => Expr::I64(<>),
     <Name>        => Expr::Name(<>),
+    <Str>         => Expr::Str(<>),
     <Func>,
     LParen <Expr> RParen,
 };
@@ -132,6 +137,7 @@ Boolean: bool = {
 
 Name: String = <"name"> => <>.to_string();
 OP:   String = <"OP">   => <>.to_string();
+Str:  String = <"Str">  => <>.to_string();
 
 NL<T>: T     = <T> Newline?;
 
@@ -152,6 +158,7 @@ extern {
         "OP"      => Tok::Operator(<&'input str>),
 
         "I64"     => Tok::IntLiteral(i64),
+        "Str"     => Tok::StrLiteral(<&'input str>),
 
         Ellipsis  => Tok::Ellipsis,
         At        => Tok::At,

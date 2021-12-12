@@ -6,7 +6,7 @@ mod interpreter;
 
 #[macro_use]
 extern crate lalrpop_util;
-lalrpop_mod!(pub grammar);
+lalrpop_mod!(#[allow(clippy::all)] pub grammar);
 
 use std::env;
 use std::fs;

@@ -97,7 +97,7 @@ impl Ctx {
 
     /// Transforms a type annotation into a monotype.
     fn type_from_one(&self, ann: &str) -> Result<Type, TypeError> {
-        match ann.as_ref() {
+        match ann {
             "Void"   => Ok(Type::Void),
             "I64"    => Ok(Type::I64),
             "Bool"   => Ok(Type::Bool),

@@ -66,7 +66,7 @@ impl Env {
                 Def::Name(dname) => {
                     env.names.insert(dname.name, dname.expr);
                 }
-                _ => unimplemented!()
+                _ => unimplemented!(),
             }
         }
         env
@@ -86,24 +86,33 @@ impl Env {
 impl Expr {
     pub fn eval<'a>(&'a self, env: &'a Env) -> Expr {
         match self {
-            Expr::Void     => Expr::Void,
-            Expr::I64(i)   => Expr::I64(*i),
-            Expr::Bool(b)  => Expr::Bool(*b),
-            Expr::Str(s)   => Expr::Str(s.to_owned()),
+            Expr::Void => Expr::Void,
+            Expr::I64(i) => Expr::I64(*i),
+            Expr::Bool(b) => Expr::Bool(*b),
+            Expr::Str(s) => Expr::Str(s.to_owned()),
             Expr::Name(id) => env.get(id).eval(env),
-            Expr::Func { param, body, closure: _ } => Expr::Func { 
-                param: param.to_owned(), 
+            Expr::Func {
+                param,
+                body,
+                closure,
+            } => Expr::Func {
+                param: param.to_owned(),
                 body: body.to_owned(),
-                closure: env.names.to_owned()
+                closure: closure.to_owned(),
             },
             Expr::Apply { left, right } => {
-                if let Expr::Func { param, body, closure } = left.eval(env) {
+                if let Expr::Func {
+                    param,
+                    body,
+                    closure,
+                } = left.eval(env)
+                {
                     let mut fenv = env.to_owned();
                     fenv.names.insert(param, right.eval(env));
                     // TODO: make sure the closure names have priority
                     fenv.names.extend(closure);
 
-                    // NOTE: the typechecker should've already ensured
+                    // NOTE: the parser should've already ensured
                     // the body is not empty, so unwrap away!
                     let (last, init) = body.split_last().unwrap();
                     for instr in init {
@@ -111,8 +120,8 @@ impl Expr {
                     }
                     last.execute(&mut fenv).eval(&fenv)
                 } else {
-                    // TODO: switch all unreachable!'s to instrinsics
-                    unreachable!();
+                    // TODO: switch all unreachable!'s to unreachable
+                    unreachable!()
                 }
             }
             Expr::Intrinsic { name, args } => match name.as_str() {
@@ -120,24 +129,21 @@ impl Expr {
                     for a in args {
                         print!("{}", a.eval(env))
                     }
-                    println!("");
+                    println!();
                     Expr::Void
                 }
                 "read" => {
                     let mut buffer = String::new();
                     io::stdin()
                         .read_to_string(&mut buffer)
-                        // .read_line(&mut buffer)
                         .expect("Woland: error reading from stdin. You are on your own.");
                     Expr::Str(buffer)
                 }
-                "cmp" => {
-                    Expr::Bool(args[0].eval(env) == args[1].eval(env))
-                }
+                "cmp" => Expr::Bool(args[0].eval(env) == args[1].eval(env)),
                 "add" => {
                     if let Expr::I64(l) = args[0].eval(env) {
                         if let Expr::I64(r) = args[1].eval(env) {
-                                Expr::I64(l + r)
+                            Expr::I64(l + r)
                         } else {
                             unreachable!()
                         }
@@ -148,7 +154,7 @@ impl Expr {
                 "mod" => {
                     if let Expr::I64(l) = args[0].eval(env) {
                         if let Expr::I64(r) = args[1].eval(env) {
-                                Expr::I64(l % r)
+                            Expr::I64(l % r)
                         } else {
                             unreachable!()
                         }
@@ -156,8 +162,8 @@ impl Expr {
                         unreachable!()
                     }
                 }
-                _ => Expr::Void
-            }
+                _ => Expr::Void,
+            },
         }
     }
 }
@@ -170,7 +176,12 @@ impl Instr {
                 // any side-effects. Beware!
                 expr.eval(env)
             }
-            Instr::Var { name, ann: _, op: _, expr  } => {
+            Instr::Var {
+                name,
+                ann: _,
+                op: _,
+                expr,
+            } => {
                 env.vars.insert(name.to_owned(), expr.eval(env));
                 Expr::Void
             }
@@ -185,10 +196,16 @@ impl Instr {
                 Expr::Void
             }
             Instr::Let(dname) => {
-                env.names.insert(
-                    dname.name.to_owned(),
-                    dname.expr.eval(env)
-                );
+                let mut expr = dname.expr.eval(env);
+                if let Expr::Func {
+                    param: _,
+                    body: _,
+                    closure,
+                } = &mut expr
+                {
+                    closure.extend(env.names.to_owned());
+                }
+                env.names.insert(dname.name.to_owned(), expr);
                 Expr::Void
             }
 
@@ -200,13 +217,13 @@ impl Instr {
                     for i in body {
                         i.execute(env);
                         if env.loops != start {
-                            break
+                            break;
                         }
                     }
-                };
+                }
                 Expr::Void
             }
-            
+
             Instr::Branch { paths } => {
                 let mut result = Expr::Void;
                 for p in paths {
@@ -217,7 +234,7 @@ impl Instr {
                                 i.execute(env);
                             }
                             result = last.execute(env);
-                            break
+                            break;
                         }
                     } else {
                         unreachable!()
@@ -234,8 +251,8 @@ impl Instr {
                     env.loops -= 1;
                     Expr::Void
                 }
-                Keyword::Ellipsis => { 
-                    /* Do nothing! This is a simple filler Instr */ 
+                Keyword::Ellipsis => {
+                    /* Do nothing! This is a simple filler Instr */
                     Expr::Void
                 }
             },
@@ -246,14 +263,13 @@ impl Instr {
 impl Display for Expr {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            Expr::I64(i)  => write!(f, "{}", i),
+            Expr::I64(i) => write!(f, "{}", i),
             Expr::Bool(b) => write!(f, "{}", b),
-            Expr::Str(s)  => write!(f, "{}", s),
+            Expr::Str(s) => write!(f, "{}", s),
             other => write!(f, "{:#?}", other),
         }
     }
 }
 
 #[cfg(test)]
-mod tests {
-}
+mod tests {}

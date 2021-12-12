@@ -83,12 +83,11 @@ impl Ctx {
                 Def::Name(dfunc) => {
                     ctx.names.insert(
                         dfunc.name.to_string(),
-                        ctx.type_from_any(&dfunc.ann)?);
-                },
+                        ctx.type_from_any(&dfunc.ann)?,
+                    );
+                }
                 Def::Type(dtype) => {
-                    ctx.dtypes.insert(
-                        dtype.name.to_string(),
-                        dtype.to_owned());
+                    ctx.dtypes.insert(dtype.name.to_string(), dtype.to_owned());
                 }
             }
         }
@@ -98,9 +97,9 @@ impl Ctx {
     /// Transforms a type annotation into a monotype.
     fn type_from_one(&self, ann: &str) -> Result<Type, TypeError> {
         match ann {
-            "Void"   => Ok(Type::Void),
-            "I64"    => Ok(Type::I64),
-            "Bool"   => Ok(Type::Bool),
+            "Void" => Ok(Type::Void),
+            "I64" => Ok(Type::I64),
+            "Bool" => Ok(Type::Bool),
             "String" => Ok(Type::String),
             _ => self.type_from_other(ann),
         }
@@ -117,14 +116,17 @@ impl Ctx {
                         for (name, ann) in r {
                             c.insert(
                                 name.to_string(),
-                                self.type_from_any(ann)?);
+                                self.type_from_any(ann)?,
+                            );
                         }
                     }
                     constrs.insert(dc.name.to_string(), c);
                 }
                 Ok(Type::New(constrs))
             }
-            None => Err(TypeError::InvalidTypeName { name: ann.to_owned() })
+            None => Err(TypeError::InvalidTypeName {
+                name: ann.to_owned(),
+            }),
         }
     }
 
@@ -143,45 +145,45 @@ impl Ctx {
     /// Queries the context for a name matching `name`.
     pub fn get(&self, name: &str) -> Result<Type, TypeError> {
         match self.names.get(name) {
-            Some(t)  => Ok(t.to_owned()),
-            None     => Err(TypeError::InvalidName { name: name.to_owned() })
+            Some(t) => Ok(t.to_owned()),
+            None => Err(TypeError::InvalidName {
+                name: name.to_owned(),
+            }),
         }
     }
 
     /// Computes the type of an arbitrary expression.
     pub fn type_of(&self, expr: &Expr) -> Result<Type, TypeError> {
         match expr {
-            Expr::Void       => Ok(Type::Void),
-            Expr::I64(_)     => Ok(Type::I64),
-            Expr::Bool(_)    => Ok(Type::Bool),
-            Expr::Str(_)     => Ok(Type::String),
+            Expr::Void => Ok(Type::Void),
+            Expr::I64(_) => Ok(Type::I64),
+            Expr::Bool(_) => Ok(Type::Bool),
+            Expr::Str(_) => Ok(Type::String),
             Expr::Name(name) => self.get(name),
-            Expr::Apply { left, right } => {
-                match self.type_of(left) {
-                    Ok(Type::Func(input, output)) => {
-                        match self.type_of(right) {
-                            Ok(t) => {
-                                if t == *input {
-                                    Ok(*output)
-                                } else {
-                                    Err(TypeError::ApplicationOnWrongType {
-                                        expr: *left.to_owned(),
-                                        expected: *input,
-                                        found: t })
-                                }
-                            }
-                            err => err
+            Expr::Apply { left, right } => match self.type_of(left) {
+                Ok(Type::Func(input, output)) => match self.type_of(right) {
+                    Ok(t) => {
+                        if t == *input {
+                            Ok(*output)
+                        } else {
+                            Err(TypeError::ApplicationOnWrongType {
+                                expr: *left.to_owned(),
+                                expected: *input,
+                                found: t,
+                            })
                         }
                     }
-                    Ok(_) => Err(TypeError::ApplicationOfZeroArgFunc { 
-                                 left: *left.to_owned(),
-                                 right: *right.to_owned() }),
-                    err => err
-                }
-            }
-            Expr::Func {..} => unreachable!(),
-            _ => { 
-                /* TDOO: Finish this! */ 
+                    err => err,
+                },
+                Ok(_) => Err(TypeError::ApplicationOfZeroArgFunc {
+                    left: *left.to_owned(),
+                    right: *right.to_owned(),
+                }),
+                err => err,
+            },
+            Expr::Func { .. } => unreachable!(),
+            _ => {
+                /* TDOO: Finish this! */
                 Ok(Type::Void)
             }
         }
@@ -191,10 +193,15 @@ impl Ctx {
     fn check_one(ctx: &mut Self, instr: &Instr) -> Result<Type, TypeError> {
         match instr {
             Instr::Compute(expr) => ctx.type_of(expr),
-            Instr::Var { name, ann, op: _, expr } => {
+            Instr::Var {
+                name,
+                ann,
+                op: _,
+                expr,
+            } => {
                 let expected = ctx.type_from_any(ann)?;
                 let found = ctx.type_of(expr)?;
-                if expected == found  {
+                if expected == found {
                     ctx.vars.insert(name.to_owned(), expected);
                     // HACK: since the two types are equal, we can
                     // move them to different owners without cloning!
@@ -203,21 +210,21 @@ impl Ctx {
                 } else {
                     Err(TypeError::AssignmentOfWrongType {
                         name: name.to_owned(),
-                        expected, 
-                        found
+                        expected,
+                        found,
                     })
                 }
             }
             Instr::Assign { name, op: _, expr } => {
                 let expected = ctx.get(name)?;
                 let found = ctx.type_of(expr)?;
-                if expected == found  {
+                if expected == found {
                     Ok(found)
                 } else {
                     Err(TypeError::AssignmentOfWrongType {
                         name: name.to_owned(),
-                        expected, 
-                        found
+                        expected,
+                        found,
                     })
                 }
             }
@@ -228,8 +235,8 @@ impl Ctx {
                     if found != Type::Bool {
                         return Err(TypeError::BranchConditionOfWrongType {
                             cond: b.0.to_owned(),
-                            found
-                        })
+                            found,
+                        });
                     }
                     for i in &b.1 {
                         Self::check_one(ctx, i)?;
@@ -250,10 +257,17 @@ impl Ctx {
 
     /// Checks that a let-defintion is correctly typed.
     pub fn check(&self, dname: &DName) -> Result<Type, TypeError> {
-        if let Expr::Func { param, body, closure: _ } = dname.expr.to_owned() {
-            if let Instr::Compute(Expr::Intrinsic {name, args: _ }) = body.first().unwrap() {
+        if let Expr::Func {
+            param,
+            body,
+            closure: _,
+        } = dname.expr.to_owned()
+        {
+            if let Instr::Compute(Expr::Intrinsic { name, args: _ }) =
+                body.first().unwrap()
+            {
                 if name.as_str() == "typeck_ignore" {
-                    return Ok(Type::Void)
+                    return Ok(Type::Void);
                 }
             }
             // Enter's the function's context by absorbing all its contained defintions
@@ -265,11 +279,14 @@ impl Ctx {
                         ctx.type_from_any(&dname.ann)?,
                     );
                 }
-                if let Instr::Var { name, ann, op: _, expr: _ } = i {
-                    ctx.names.insert(
-                        name.to_string(),
-                        ctx.type_from_any(ann)?,
-                    );
+                if let Instr::Var {
+                    name,
+                    ann,
+                    op: _,
+                    expr: _,
+                } = i
+                {
+                    ctx.names.insert(name.to_string(), ctx.type_from_any(ann)?);
                 }
             }
             ctx.names.insert(param, ctx.type_from_any(&dname.ann)?);
@@ -279,13 +296,13 @@ impl Ctx {
             // Check that the other sequence of Instr's is well typed.
             for i in first {
                 Self::check_one(&mut ctx, i)?;
-            };
+            }
             // Check that the return value has the declared type.
             let ftype = ctx.get(&dname.name)?;
             let found = Self::check_one(&mut ctx, last)?;
             let expected = match &ftype {
                 Type::Func(_, t) => *t.to_owned(),
-                other => other.to_owned()
+                other => other.to_owned(),
             };
             if found == expected {
                 Ok(ftype)
@@ -293,7 +310,7 @@ impl Ctx {
                 Err(TypeError::InvalidReturnType {
                     name: dname.name.to_owned(),
                     expected,
-                    found
+                    found,
                 })
             }
         } else {

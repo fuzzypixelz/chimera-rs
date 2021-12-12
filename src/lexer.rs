@@ -25,6 +25,7 @@ pub enum Tok<'input> {
     Else,
 
     Loop,
+    While,
 
     Break,
 
@@ -56,6 +57,7 @@ pub static RESERVED_NAMES: phf::Map<&'static str, Tok> = phf::phf_map! {
     "elif"      => Tok::Elif,
     "else"      => Tok::Else,
     "loop"      => Tok::Loop,
+    "while"     => Tok::While,
     "break"     => Tok::Break,
 };
 

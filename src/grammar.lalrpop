@@ -61,6 +61,19 @@ Instr: Instr = {
     <Branch>,
     <Assign>,
     NL<Loop> <b: Block> NL<End> => Instr::Loop { body: b },
+    NL<While> <c: Expr> NL<Do> <mut b: Block> NL<End> => {
+        let not_c = Expr::Apply { 
+            left:  Box::new(Expr::Name("not".to_string())),
+            right: Box::new(c)
+        };
+        b.insert(0, Instr::Branch {
+            paths: vec![
+                (not_c,            vec![Instr::Keyword(Keyword::Break)]),
+                (Expr::Bool(true), vec![Instr::Keyword(Keyword::Ellipsis)])
+            ]
+        });
+        Instr::Loop { body: b }
+    },
 };
 
 Block: Vec<Instr> = {
@@ -68,6 +81,7 @@ Block: Vec<Instr> = {
     <Instr+>
 };
 
+#[inline]
 Intrinsic: Expr = {
     At <n: Name> <es: NApply*>
     => Expr::Intrinsic { name: n, args: es }
@@ -94,6 +108,7 @@ Branch: Instr = {
     }
 };
 
+#[inline]
 Expr: Expr = {
     NApply,
     Apply,
@@ -178,6 +193,7 @@ extern {
         Else      => Tok::Else,
 
         Loop      => Tok::Loop,
+        While     => Tok::While,
 
         Break     => Tok::Break,
 

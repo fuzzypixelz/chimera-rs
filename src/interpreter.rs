@@ -117,7 +117,10 @@ impl Expr {
             }
             Expr::Intrinsic { name, args } => match name.as_str() {
                 "dump" => {
-                    println!("{}", args[0].eval(env));
+                    for a in args {
+                        print!("{}", a.eval(env))
+                    }
+                    println!("");
                     Expr::Void
                 }
                 "read" => {
@@ -184,9 +187,9 @@ impl Instr {
             Instr::Let(dname) => {
                 env.names.insert(
                     dname.name.to_owned(),
-                    dname.expr.to_owned()
+                    dname.expr.eval(env)
                 );
-                dname.expr.to_owned()
+                Expr::Void
             }
 
             Instr::Loop { body } => {

@@ -1,18 +1,53 @@
-use crate::ast::*;
-use crate::lexer::{Tok, LexicalError};
+use std::cell::RefCell;
+use std::rc::Rc;
 
 use rustc_hash::FxHashMap;
 
-grammar<'input>(input: &'input str);
+use crate::ast::*;
+use crate::lexer::{Tok, LexicalError};
+use crate::interpreter::Env;
+
+grammar<'input>(input: &'input str, macros: &mut FxHashMap<String, DMacro>);
 
 pub AST: AST = {
     <Def+> => AST { defs: <> },
 };
 
 pub Def: Def = {
-    <DType> => Def::Type(<>),
-    <DName> => Def::Name(<>),
+    <DType>  => Def::Type(<>),
+    <DName>  => Def::Name(<>),
+    <DMacro> => {
+        macros.insert(
+            <>.name.to_string(),
+            <>.clone()
+        );
+        Def::Macro(<>)
+    }
 };
+
+pub DMacro: DMacro = {
+    Macro <n: Name> Excl <ps: Name*> Equal NL<Do> <b: Block> NL<End> 
+    => DMacro { name: n, params: ps, body: b }
+}
+
+MacroCall: Expr = {
+    <n : Name> Excl <es: NApply*> => {
+        let dmacro = macros.get(&n).unwrap().clone();
+        let mut body = Vec::new();
+        for (p, e) in dmacro.params.into_iter().zip(es.into_iter()) {
+            body.push(Instr::Let(DName {
+                name: p,
+                // FIXME: this is not ideal
+                ann: vec!["Void".to_string()],
+                op: AOP::Equal,
+                expr: e
+            }));
+        }
+        body.extend(dmacro.body);
+        dbg!(&body);
+        Expr::Block { body }
+    }
+}
 
 pub DType: DType = {
     Type <n: Name> <ps: Name*> NL<Equal> <b: TBody>
@@ -40,12 +75,12 @@ AName: (String, Ann) = {
 };
 
 DName: DName = {
-    Let <an: AName> <op: AOP> <e: Expr> Newline
-    => DName {name: an.0, ann: an.1, op, expr: e}
+    Let <n: Name> <op: AOP> <e: Expr> Newline
+    => DName {name: n, ann: vec!["".to_string()], op, expr: e}
 };
 
 Ann: Ann = {
-    SepList1<Name, Arrow>
+    SepList1<TypeName, Arrow>
 };
 
 AOP: AOP = {
@@ -56,9 +91,9 @@ AOP: AOP = {
 Instr: Instr = {
     <DName>           => Instr::Let(<>),
     <Expr> Newline    => Instr::Compute(<>),
-    <Keyword> Newline => Instr::Keyword(<>),
+    Ellipsis Newline  => Instr::Ellipsis, 
+    Break    Newline  => Instr::Break,
     <Bind>,
-    <Branch>,
     <Assign>,
     NL<Loop> <b: Block> NL<End> => Instr::Loop { body: b },
     NL<While> <c: Expr> NL<Do> <mut b: Block> NL<End> => {
@@ -66,12 +101,12 @@ Instr: Instr = {
             left:  Box::new(Expr::Name("not".to_string())),
             right: Box::new(c)
         };
-        b.insert(0, Instr::Branch {
+        b.insert(0, Instr::Compute(Expr::Branch {
             paths: vec![
-                (not_c,            vec![Instr::Keyword(Keyword::Break)]),
-                (Expr::Bool(true), vec![Instr::Keyword(Keyword::Ellipsis)])
+                (not_c,            vec![Instr::Break]),
+                (Expr::Bool(true), vec![Instr::Ellipsis])
             ]
-        });
+        }));
         Instr::Loop { body: b }
     },
 };
@@ -81,15 +116,14 @@ Block: Vec<Instr> = {
     <Instr+>
 };
 
-#[inline]
 Intrinsic: Expr = {
     At <n: Name> <es: NApply*>
     => Expr::Intrinsic { name: n, args: es }
 };
 
 Bind: Instr = {
-    Var <an: AName> <op: AOP> <e: Expr> Newline
-    => Instr::Var {name: an.0, ann: an.1, op, expr: e}
+    Var <n: Name> <op: AOP> <e: Expr> Newline
+    => Instr::Var {name: n, ann: vec!["".to_string()], op, expr: e}
 };
 
 Assign: Instr = {
@@ -97,32 +131,45 @@ Assign: Instr = {
     => Instr::Assign {name: n, op, expr: e}
 };
 
-Branch: Instr = {
-    If <e: Expr> NL<Then> <b1: Block> <b2: (NL<Else> <Block>)?> NL<End>
+Branch: Expr = {
+    If <e: Expr> NL<Then> <b1: Block> <b2: (NL<Else> <Block>)?> End
     => { 
         let b2 = match b2 {
-            None    => vec![Instr::Keyword(Keyword::Ellipsis)],
+            None    => vec![Instr::Compute(Expr::Void)],
             Some(v) => v
         };
-        Instr::Branch { paths: vec![(e, b1), (Expr::Bool(true), b2)] }
+        Expr::Branch { paths: vec![(e, b1), (Expr::Bool(true), b2)] }
     }
 };
 
-#[inline]
 Expr: Expr = {
+    NInfix,
+    <l: Expr> <op: OP> <r: NInfix> => Expr::Apply {
+        left: Box::new(Expr::Apply { 
+            left:  Box::new(Expr::Name(op)),
+            right: Box::new(l)
+        }),
+        right: Box::new(r)
+    },
+    Intrinsic,
+    NL<Do> <Block> End => Expr::Block { body: <> },
+    MacroCall,
+}
+
+NInfix: Expr = {
     NApply,
     Apply,
-    Intrinsic
 };
 
 // Not a function application
 NApply: Expr = {
-    LParen RParen => Expr::Void,
-    <Boolean>     => Expr::Bool(<>),
-    <I64>         => Expr::I64(<>),
-    <Name>        => Expr::Name(<>),
-    <Str>         => Expr::Str(<>),
+    LParen RParen  => Expr::Void,
+    <Boolean>      => Expr::Bool(<>),
+    <I64>          => Expr::I64(<>),
+    <Name>         => Expr::Name(<>),
+    <Str>          => Expr::Str(<>),
     <Func>,
+    <Branch>,
     LParen <Expr> RParen,
 };
 
@@ -132,13 +179,23 @@ Apply: Expr = {
 };
 
 Func: Expr = {
-    Do Pipe <p: Name> NL<Pipe> <b: Block> End
-    => Expr::Func { param: p, body: b, closure: FxHashMap::default() }
-};
-
-Keyword: Keyword = {
-    Ellipsis            => Keyword::Ellipsis, 
-    Break               => Keyword::Break,
+    // TODO: bring back type annotations
+    // Fn Pipe <an: AName?> Pipe Arrow <mut a: Ann> 
+    Fn Pipe <n: Name?> NL<Pipe>
+    NL<Do> <b: Block> End => {
+        // let (n, t) = match an {
+        //     None => ("_".to_string(), "Void".to_string()),
+        //     Some((n, t)) => (n, t.first().unwrap().to_owned())
+        // };
+        // a.insert(0, t);
+        let c = Rc::new(RefCell::new(Env::default()));
+        Expr::Func { 
+            param: n.unwrap_or("_".to_string()),
+            body: b, 
+            closure: c, 
+            ann: vec!["Void".to_string()] 
+        }
+    }
 };
 
 I64: i64 = <"I64"> => match <> {
@@ -151,11 +208,25 @@ Boolean: bool = {
     False => false
 };
 
-Name: String = <"name"> => <>.to_string();
-OP:   String = <"OP">   => <>.to_string();
-Str:  String = <"Str">  => <>.to_string();
+TypeName: String = <"type"> => <>.to_string();
+Name:     String = {
+    <"name"> => <>.to_string(),
+    LParen <OP> RParen
+};
+OP:       String = <"OP">   => format!("({})", <>).to_string();
+Str:      String = <"Str">  => <>.to_string();
 
 NL<T>: T     = <T> Newline?;
+
+SepList<T, S>: Vec<T> = {
+    <mut v: (<T> S)*> <e: T?> => match e {
+        None => v,
+        Some(e) => {
+            v.push(e);
+            v
+        }
+    }
+};
 
 SepList1<T, S>: Vec<T> = {
     <mut v: (<T> S)*> <e: T> => { v.push(e); v }
@@ -171,19 +242,24 @@ extern {
     
     enum Tok<'input> {
         "name"    => Tok::Name(<&'input str>),
+        "type"    => Tok::TypeName(<&'input str>),
         "OP"      => Tok::Operator(<&'input str>),
 
         "I64"     => Tok::IntLiteral(i64),
         "Str"     => Tok::StrLiteral(<&'input str>),
 
         Ellipsis  => Tok::Ellipsis,
+
         At        => Tok::At,
+        Excl      => Tok::Excl,
+        Dot       => Tok::Dot,
 
         Let       => Tok::Let,
         Do        => Tok::Do,
         End       => Tok::End,
         Var       => Tok::Var,
         Type      => Tok::Type,
+        Macro     => Tok::Macro,
 
         True      => Tok::True,
         False     => Tok::False,
@@ -191,6 +267,8 @@ extern {
         Then      => Tok::Then,
         Elif      => Tok::Elif,
         Else      => Tok::Else,
+
+        Fn        => Tok::Fn,
 
         Loop      => Tok::Loop,
         While     => Tok::While,
@@ -208,6 +286,8 @@ extern {
         RParen    => Tok::RParen,
         LBrack    => Tok::LBrack,
         RBrack    => Tok::RBrack,
+        LSBrack   => Tok::LSBrack,
+        RSBrack   => Tok::RSBrack,
 
         Newline   => Tok::Newline
     }

@@ -1,20 +1,82 @@
-let dump: Forall A => (x: A) -> Void ~
-  intrinsic "dump"
+# (1) block expression, sequence of instructions;
+# should end in a Compute(Expr) instruction
+# NOTE: a block expression is different from a
+# fn || -> T do ... end as the former immediatly
+# reduces to an expression of the form T, but the latter
+# is a T -> T that only reduces to a T when applied to ()
+let hundredEvenNumbers = do
+    # var-instruction
+    var result = 0
+    var i = 0
+    # Loops are not expressions, as you cannot
+    # define them in a top-level let-instruction
+    # because there are no global variables.
+    while i < 100 do
+        if i % 2 == 0 then
+            # assignment-instruction
+            result = result + i
+        end
+    end
+    result
 end
 
-let read: String ~
-  intrinsic "read"
+# (2) lambda-expression
+let (+) = fn |x: I64| -> I64 -> I64 do
+    fn |y: I64| -> I64 do
+        let z = @add x y
+        z
+    end
 end
 
-let (+) x y: I64 -> I64 -> I64 =
-  (instrinsic "addI64") x
+let fac = fn |n: I64| -> I64 do
+    if n == 0 then 
+        1 
+    else 
+        fac (n - 1) 
+    end
 end
 
-let (==) x y: I64 -> I64 -> I64 =
-  (instrinsic "cmpI64") x
+type Time =
+    Day,
+    Night
 end
 
-let (%) x y: I64 -> I64 -> I64 =
-  (instrinsic "modI64") x
+# (3) if-expression
+let time ~ if clock () < 1000 then Time::Day else Time::Night end
+
+# (4) application-expression
+let two = (fn |x: I64| -> I64 do x + 1 end) 1
+
+# (5) literal-expression
+let void = ()
+let answer = 42
+let truth = true
+let greeting = "Hello, World!"
+let name = answer
+let intrinsic = @compiler_directive 0
+
+macro greet! name = do
+    @dump "Your name is: "
+    @dump name
+    @dump "Nice to meet you!"
+    ()
 end
 
+macro filename! = do
+    "~/Projects/Woland/examples/expressions.wo"
+    ...
+end
+
+# main is a block-expression executed when
+# the program starts
+let main: Void = do
+    # Using intrinsics requires annotations
+    # as the typechecker is seperate from
+    # the interpreter.
+    let name: String = @read
+    # (6) macro-expression, always expands
+    # to a block-expression
+    greet! name
+    @dump "This file is located at: " filename!
+    ()
+end

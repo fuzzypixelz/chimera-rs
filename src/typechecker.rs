@@ -81,10 +81,8 @@ impl Ctx {
         for d in &prog.defs {
             match d {
                 Def::Name(dfunc) => {
-                    ctx.names.insert(
-                        dfunc.name.to_string(),
-                        ctx.type_from_any(&dfunc.ann)?,
-                    );
+                    ctx.names
+                        .insert(dfunc.name.to_string(), ctx.type_from_any(&dfunc.ann)?);
                 }
                 Def::Type(dtype) => {
                     ctx.dtypes.insert(dtype.name.to_string(), dtype.to_owned());
@@ -114,10 +112,7 @@ impl Ctx {
                     let mut c = HashMap::new();
                     if let Some(r) = &dc.record {
                         for (name, ann) in r {
-                            c.insert(
-                                name.to_string(),
-                                self.type_from_any(ann)?,
-                            );
+                            c.insert(name.to_string(), self.type_from_any(ann)?);
                         }
                     }
                     constrs.insert(dc.name.to_string(), c);
@@ -258,14 +253,13 @@ impl Ctx {
     /// Checks that a let-defintion is correctly typed.
     pub fn check(&self, dname: &DName) -> Result<Type, TypeError> {
         if let Expr::Func {
+            ann,
             param,
             body,
             closure: _,
         } = dname.expr.to_owned()
         {
-            if let Instr::Compute(Expr::Intrinsic { name, args: _ }) =
-                body.first().unwrap()
-            {
+            if let Instr::Compute(Expr::Intrinsic { name, args: _ }) = body.first().unwrap() {
                 if name.as_str() == "typeck_ignore" {
                     return Ok(Type::Void);
                 }
@@ -274,10 +268,8 @@ impl Ctx {
             let mut ctx = self.to_owned();
             for i in &body {
                 if let Instr::Let(dname) = i {
-                    ctx.names.insert(
-                        dname.name.to_string(),
-                        ctx.type_from_any(&dname.ann)?,
-                    );
+                    ctx.names
+                        .insert(dname.name.to_string(), ctx.type_from_any(&dname.ann)?);
                 }
                 if let Instr::Var {
                     name,

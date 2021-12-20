@@ -3,19 +3,26 @@ pub type Spanned<'input> = Result<(usize, Tok<'input>, usize), LexicalError>;
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum Tok<'input> {
     Name(&'input str),
+    TypeName(&'input str),
+
     Operator(&'input str),
 
     IntLiteral(i64),
     StrLiteral(&'input str),
 
     Ellipsis,
+
     At,
+    Excl,
+    Dot,
+    Dollar,
 
     Let,
     Do,
     End,
     Var,
     Type,
+    Macro,
 
     True,
     False,
@@ -23,6 +30,8 @@ pub enum Tok<'input> {
     Then,
     Elif,
     Else,
+
+    Fn,
 
     Loop,
     While,
@@ -40,6 +49,8 @@ pub enum Tok<'input> {
     RParen,
     LBrack,
     RBrack,
+    LSBrack,
+    RSBrack,
 
     Newline,
 }
@@ -50,6 +61,8 @@ pub static RESERVED_NAMES: phf::Map<&'static str, Tok> = phf::phf_map! {
     "end"       => Tok::End,
     "var"       => Tok::Var,
     "type"      => Tok::Type,
+    "macro"     => Tok::Macro,
+    "fn"        => Tok::Fn,
     "true"      => Tok::True,
     "false"     => Tok::False,
     "if"        => Tok::If,
@@ -69,6 +82,9 @@ pub static RESERVED_SYMBOLS: phf::Map<&'static str, Tok> = phf::phf_map! {
     "="   => Tok::Equal,
     "~"   => Tok::Tilde,
     "@"   => Tok::At,
+    "!"   => Tok::Excl,
+    "$"   => Tok::Dollar,
+    "."   => Tok::Dot,
 };
 
 #[derive(Copy, Clone, Debug)]
@@ -93,11 +109,7 @@ impl<'input> Lexer<'input> {
         }
     }
 
-    fn take_while<F>(
-        &mut self,
-        start: usize,
-        mut predicate: F,
-    ) -> (usize, &'input str)
+    fn take_while<F>(&mut self, start: usize, mut predicate: F) -> (usize, &'input str)
     where
         F: FnMut(char) -> bool,
     {
@@ -114,8 +126,7 @@ impl<'input> Lexer<'input> {
     }
 
     fn name(&mut self, start: usize) -> Spanned<'input> {
-        let (end, src) =
-            self.take_while(start, |c| c.is_alphanumeric() || c == '_');
+        let (end, src) = self.take_while(start, |c| c.is_alphanumeric() || c == '_');
         let token = if RESERVED_NAMES.contains_key(src) {
             RESERVED_NAMES[src]
         } else {
@@ -125,9 +136,19 @@ impl<'input> Lexer<'input> {
         Ok((start, token, end))
     }
 
+    fn type_name(&mut self, start: usize) -> Spanned<'input> {
+        let (end, src) = self.take_while(start, |c| c.is_alphanumeric() || c == '_');
+        let token = if RESERVED_NAMES.contains_key(src) {
+            RESERVED_NAMES[src]
+        } else {
+            Tok::TypeName(src)
+        };
+
+        Ok((start, token, end))
+    }
+
     fn operator(&mut self, start: usize) -> Spanned<'input> {
-        let (end, src) =
-            self.take_while(start, |c| "~!@#$%^&*-+=|:;?<>.,\\".contains(c));
+        let (end, src) = self.take_while(start, |c| "/~!@#$%^&*-+=|:;?<>.,\\".contains(c));
         let token = if RESERVED_SYMBOLS.contains_key(src) {
             RESERVED_SYMBOLS[src]
         } else {
@@ -158,24 +179,24 @@ impl<'input> Iterator for Lexer<'input> {
         while let Some(&(start, c)) = self.chars.peek() {
             return match c {
                 c if c.is_whitespace() => {
-                    let (end, src) =
-                        self.take_while(start, |c| c.is_whitespace());
+                    let (end, src) = self.take_while(start, |c| c.is_whitespace());
                     if src.contains('\n') {
                         Some(Ok((start, Tok::Newline, end)))
                     } else {
-                        continue
+                        continue;
                     }
                 }
                 // TODO: This convenience function includes
                 // Unicode characters too, replace it or keep
                 // this in the language.
                 c if c.is_numeric() => Some(self.integer(start)),
-                c if c.is_alphabetic() || c == '_' => Some(self.name(start)),
+                c if c.is_uppercase() => Some(self.type_name(start)),
+                c if c.is_lowercase() || c == '_' => Some(self.name(start)),
                 '"' => Some(self.string(start)),
                 '#' => {
                     self.take_while(start, |c| c != '\n');
                     self.chars.next(); // Also consume the newline
-                    continue
+                    continue;
                 }
                 '(' => {
                     self.chars.next();
@@ -192,6 +213,14 @@ impl<'input> Iterator for Lexer<'input> {
                 '}' => {
                     self.chars.next();
                     Some(Ok((start, Tok::RBrack, start + 1)))
+                }
+                '[' => {
+                    self.chars.next();
+                    Some(Ok((start, Tok::LSBrack, start + 1)))
+                }
+                ']' => {
+                    self.chars.next();
+                    Some(Ok((start, Tok::RSBrack, start + 1)))
                 }
                 ',' => {
                     self.chars.next();

@@ -1,5 +1,8 @@
+use std::cell::RefCell;
 use std::fmt::Debug;
-use rustc_hash::FxHashMap;
+use std::rc::Rc;
+
+use crate::interpreter::Env;
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct AST {
@@ -10,6 +13,14 @@ pub struct AST {
 pub enum Def {
     Type(DType),
     Name(DName),
+    Macro(DMacro),
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct DMacro {
+    pub name: String,
+    pub params: Vec<String>,
+    pub body: Vec<Instr>,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -60,36 +71,50 @@ pub enum Instr {
         op: AOP,
         expr: Expr,
     }, // i = 0
-    Loop   { body: Vec<Instr> }, // loop ... end
-    Branch { paths: Vec<(Expr, Vec<Instr>)> }, // if cond then 0 else 42
+    Loop {
+        body: Vec<Instr>,
+    }, // loop ... end
     // The toname: Stringplevel of a program contains function and type
     // declarexpr: Expr, ations. The same is allowed in the body of a function.
-    Let(DName), // let addOne = do |x| x + 1 end
+    Let(DName), // let addOne = fn |x| do x + 1 end
     // This is necessary for special Instr's such as break for control
     // flow in simple `loop ... end` blocks.
-    Keyword(Keyword), // break
+    Ellipsis,
+    Break,
+    // Continue,
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Expr {
     // Primitives
-    Void, // ()
+    Void,     // ()
     I64(i64), // 42
     // U64(u64),
     // F64(f64),
-    Bool(bool), // True / False
+    Bool(bool),  // True / False
     Str(String), // "Hello, World\n"
     // Functions
     Name(String), // coolName
-    Func    { param: String, body: Vec<Instr>, closure: FxHashMap<String, Expr> }, // do |x| x + 1 end
-    Apply  { left: Box<Expr>, right: Box<Expr> }, // f x
-    Intrinsic { name: String, args: Vec<Expr> }
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub enum Keyword {
-    Break,
-    Ellipsis,
+    Block {
+        body: Vec<Instr>,
+    },
+    Func {
+        param: String,
+        body: Vec<Instr>,
+        closure: Rc<RefCell<Env>>,
+        ann: Ann,
+    }, // do |x| x + 1 end
+    Apply {
+        left: Box<Expr>,
+        right: Box<Expr>,
+    }, // f x
+    Branch {
+        paths: Vec<(Expr, Vec<Instr>)>,
+    }, // if cond then 0 else 42
+    Intrinsic {
+        name: String,
+        args: Vec<Expr>,
+    },
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -97,4 +122,3 @@ pub enum AOP {
     Equal,
     Tilde,
 }
-

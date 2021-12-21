@@ -75,8 +75,33 @@ AName: (String, Ann) = {
 };
 
 DName: DName = {
-    Let <n: Name> <op: AOP> <e: Expr> Newline
-    => DName {name: n, ann: vec!["".to_string()], op, expr: e}
+    Let <n: Name> <ps: Name*> <op: AOP> <e: Expr> Newline => {
+        if ps.is_empty() {
+            DName {name: n, ann: vec!["".to_string()], op, expr: e}
+        } else {
+            // If the expression is already a block, avoid wrapping
+            // it in another one by extracting the Vec<Instr> inside.
+            let mut body = match e {
+                Expr::Block { body } => body,
+                other                => vec![Instr::Compute(other)]
+            };
+            let make_lambda = |p, b| Expr::Func { 
+                    param: p,
+                    body: b,
+                    closure: Rc::new(RefCell::new(Env::default())),
+                    ann: vec!["Void".to_string()] 
+            };
+            let (head, tail) = ps.split_first().unwrap();
+            for p in tail.into_iter().rev() {
+                body = vec![Instr::Compute(make_lambda(p.clone(), body))]
+            }
+            DName { name: n, 
+                    ann: vec!["".to_string()], 
+                    op, 
+                    expr: make_lambda(head.clone(), body) 
+            }
+        }
+    }
 };
 
 Ann: Ann = {

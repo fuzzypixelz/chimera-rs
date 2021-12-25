@@ -72,14 +72,14 @@ Instr: Instr = {
     <Assign>,
     NL<Loop> <b: Block> NL<End> => Instr::Loop { body: b },
     NL<While> <c: Expr> NL<Do> <mut b: Block> NL<End> => {
-        let not_c = Expr::Apply { 
-            left:  Box::new(Expr::Name("not".to_string())),
-            right: Box::new(c)
-        };
+        // let not_c = Expr::Apply { 
+        //     left:  Box::new(Expr::Name("not".to_string())),
+        //     right: Box::new(c)
+        // };
         b.insert(0, Instr::Compute(Expr::Branch {
             paths: vec![
-                (not_c,            vec![Instr::Break]),
-                (Expr::Bool(true), vec![Instr::Ellipsis])
+                (c,                vec![Instr::Ellipsis]),
+                (Expr::Bool(true), vec![Instr::Break])
             ]
         }));
         Instr::Loop { body: b }

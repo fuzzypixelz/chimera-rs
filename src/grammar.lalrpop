@@ -1,72 +1,22 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use rustc_hash::FxHashMap;
-
 use crate::ast::*;
 use crate::lexer::{Tok, LexicalError};
 use crate::interpreter::Env;
 
-grammar<'input>(input: &'input str, macros: &mut FxHashMap<String, DMacro>);
+grammar<'input>(input: &'input str);
 
 pub AST: AST = {
-    <Def+> => AST { defs: <> },
+    <m: Mod> <ds: Def+> => AST { module: m, defs: ds },
 };
+
+Mod: Mod = {
+    <is: (Import <Name> Newline)*> => Mod { imports: is }
+}
 
 pub Def: Def = {
-    <DType>  => Def::Type(<>),
     <DName>  => Def::Name(<>),
-    <DMacro> => {
-        macros.insert(
-            <>.name.to_string(),
-            <>.clone()
-        );
-        Def::Macro(<>)
-    }
-};
-
-pub DMacro: DMacro = {
-    Macro <n: Name> Excl <ps: Name*> Equal NL<Do> <b: Block> NL<End> 
-    => DMacro { name: n, params: ps, body: b }
-}
-
-MacroCall: Expr = {
-    <n : Name> Excl <es: NApply*> => {
-        let dmacro = macros.get(&n).unwrap().clone();
-        let mut body = Vec::new();
-        for (p, e) in dmacro.params.into_iter().zip(es.into_iter()) {
-            body.push(Instr::Let(DName {
-                name: p,
-                // FIXME: this is not ideal
-                ann: vec!["Void".to_string()],
-                op: AOP::Equal,
-                expr: e
-            }));
-        }
-        body.extend(dmacro.body);
-        dbg!(&body);
-        Expr::Block { body }
-    }
-}
-
-pub DType: DType = {
-    Type <n: Name> <ps: Name*> NL<Equal> <b: TBody>
-    => DType { name: n, params: ps, body: b }
-};
-
-TBody: Vec<DConstr> = {
-    <DConstr> => vec![<>],
-    <Many2<DConstr>> NL<End>
-};
-
-DConstr: DConstr = {
-    <n: Name> <r: Record?> Newline => {
-        DConstr { name: n, record: r }
-    }
-};
-
-Record: Vec<(String, Ann)> = {
-    LBrack <SepList1<AName, Comma>> RBrack
 };
 
 // Annotated name; no parameters
@@ -178,7 +128,6 @@ Expr: Expr = {
     },
     Intrinsic,
     NL<Do> <Block> End => Expr::Block { body: <> },
-    MacroCall,
 }
 
 NInfix: Expr = {

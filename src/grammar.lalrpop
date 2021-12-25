@@ -106,14 +106,18 @@ Assign: Instr = {
     => Instr::Assign {name: n, op, expr: e}
 };
 
+// 
 Branch: Expr = {
-    If <e: Expr> NL<Then> <b1: Block> <b2: (NL<Else> <Block>)?> End
+    If <e: Expr> NL<Then> <b1: Block> <b2: (NL<Elif> <Expr> NL<Then> <Block>)*> <b3: (NL<Else> <Block>)?> End
     => { 
-        let b2 = match b2 {
+        let b3 = match b3 {
             None    => vec![Instr::Compute(Expr::Void)],
             Some(v) => v
         };
-        Expr::Branch { paths: vec![(e, b1), (Expr::Bool(true), b2)] }
+        let mut paths = vec![(e, b1)];
+        paths.extend(b2.into_iter());
+        paths.push((Expr::Bool(true), b3));
+        Expr::Branch { paths }
     }
 };
 

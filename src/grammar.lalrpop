@@ -239,6 +239,7 @@ extern {
         Var       => Tok::Var,
         Type      => Tok::Type,
         Macro     => Tok::Macro,
+        Import    => Tok::Import,
 
         True      => Tok::True,
         False     => Tok::False,

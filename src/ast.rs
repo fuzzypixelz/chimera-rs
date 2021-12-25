@@ -6,21 +6,13 @@ use crate::interpreter::Env;
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct AST {
+    pub module: Mod,
     pub defs: Vec<Def>,
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Def {
-    Type(DType),
     Name(DName),
-    Macro(DMacro),
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub struct DMacro {
-    pub name: String,
-    pub params: Vec<String>,
-    pub body: Vec<Instr>,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -33,18 +25,12 @@ pub struct DName {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct DType {
-    // Type decleration. Consists of the new Type's name,
-    // and the list of its constructros.
-    pub name: String,
-    pub params: Vec<String>,
-    pub body: Vec<DConstr>,
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub struct DConstr {
-    pub name: String,
-    pub record: Option<Vec<(String, Ann)>>,
+pub struct Mod {
+    pub imports: Vec<String>,
+    // FIXME: Allow for greater control of the
+    // exported names using a `export (name1, name2)`
+    // syntax.
+    // exports { names: Vec<String> },
 }
 
 // pub type Name   = String;
@@ -95,6 +81,7 @@ pub enum Expr {
     Str(String), // "Hello, World\n"
     // Functions
     Name(String), // coolName
+    List(List),
     Block {
         body: Vec<Instr>,
     },
@@ -121,4 +108,27 @@ pub enum Expr {
 pub enum AOP {
     Equal,
     Tilde,
+}
+
+/// The representation of a "Cons List" within the interpreter,
+/// as the language isn't mature enough to have custom data types yet.
+/// This is a temporary way of having aggregate data types in Woland.
+#[derive(Debug, PartialEq, Clone)]
+pub enum List {
+    Cons(Box<Expr>, Box<Expr>),
+    Nil,
+}
+
+impl From<Vec<Expr>> for List {
+    fn from(mut item: Vec<Expr>) -> Self {
+        // FIXME: this is too slow!
+        if item.is_empty() {
+            List::Nil
+        } else {
+            // Could be better written, probably.
+            let tail = item.drain(1..).collect::<Vec<Expr>>();
+            let head = item.pop().unwrap();
+            List::Cons(Box::new(head), Box::new(Expr::List(tail.into())))
+        }
+    }
 }

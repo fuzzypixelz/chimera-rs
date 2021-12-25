@@ -23,6 +23,7 @@ pub enum Tok<'input> {
     Var,
     Type,
     Macro,
+    Import,
 
     True,
     False,
@@ -62,6 +63,7 @@ pub static RESERVED_NAMES: phf::Map<&'static str, Tok> = phf::phf_map! {
     "var"       => Tok::Var,
     "type"      => Tok::Type,
     "macro"     => Tok::Macro,
+    "import"    => Tok::Import,
     "fn"        => Tok::Fn,
     "true"      => Tok::True,
     "false"     => Tok::False,
@@ -195,7 +197,9 @@ impl<'input> Iterator for Lexer<'input> {
                 '"' => Some(self.string(start)),
                 '#' => {
                     self.take_while(start, |c| c != '\n');
-                    self.chars.next(); // Also consume the newline
+                    // Also consume all newlines that follow, they are irrelevant
+                    // for the syntax as the context is a comment.
+                    self.take_while(start, |c| c.is_whitespace());
                     continue;
                 }
                 '(' => {

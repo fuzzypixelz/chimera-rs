@@ -70,22 +70,16 @@ pub struct Env {
 }
 
 impl Env {
-    pub fn new(ast: &AST) -> Self {
+    pub fn new(defs: &Vec<Def>) -> Self {
         let mut env = Self::default();
-        for def in &ast.defs {
+        for def in defs {
             match def {
                 Def::Name(dname) => {
                     env.names.insert(dname.name.clone(), dname.expr.clone());
                 }
-                Def::Macro(_) => {}
-                _ => unimplemented!(),
             }
         }
         env
-    }
-
-    pub fn extend(&mut self, ast: &AST) -> Self {
-        unimplemented!()
     }
 
     /// Get the first Env containing `name`, this was we can mutate the var directly.
@@ -124,6 +118,13 @@ impl Expr {
             Expr::I64(i) => Expr::I64(*i),
             Expr::Bool(b) => Expr::Bool(*b),
             Expr::Str(s) => Expr::Str(s.to_string()),
+            Expr::List(l) => Expr::List(match l {
+                List::Nil => List::Nil,
+                List::Cons(h, t) => List::Cons(
+                    Box::new(h.eval(env.clone(), cont.clone())),
+                    Box::new(t.eval(env, cont)),
+                ),
+            }),
             Expr::Name(id) => Env::get_name(env, cont, id),
             Expr::Func {
                 ann, param, body, ..
@@ -276,6 +277,36 @@ impl Expr {
                         }
                     }
                     Expr::Void
+                }
+                "cons" => {
+                    if let Expr::List(l) = args[1].eval(env.clone(), cont.clone()) {
+                        Expr::List(List::Cons(
+                            Box::new(args[0].eval(env.clone(), cont.clone())),
+                            Box::new(Expr::List(l)),
+                        ))
+                    } else {
+                        panic!("Woland: can only get the head of a list.");
+                    }
+                }
+                "head" => {
+                    if let Expr::List(l) = args[0].eval(env.clone(), cont.clone()) {
+                        match l {
+                            List::Nil => panic!("Woland: head: empty list."),
+                            List::Cons(h, _) => *h,
+                        }
+                    } else {
+                        panic!("Woland: can only get the head of a list.");
+                    }
+                }
+                "tail" => {
+                    if let Expr::List(l) = args[0].eval(env.clone(), cont.clone()) {
+                        match l {
+                            List::Nil => panic!("Woland: head: empty list."),
+                            List::Cons(_, t) => *t,
+                        }
+                    } else {
+                        panic!("Woland: can only get the tail of a list.");
+                    }
                 }
                 _ => Expr::Void,
             },

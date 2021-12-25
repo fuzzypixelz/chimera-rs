@@ -193,15 +193,20 @@ NApply: Expr = {
     <I64>          => Expr::I64(<>),
     <Name>         => Expr::Name(<>),
     <Str>          => Expr::Str(<>),
+    <List>,
     <Func>,
     <Branch>,
     LParen <Expr> RParen,
 };
 
 Apply: Expr = {
-    <l: Apply> <r: NApply>  => Expr::Apply { left: Box::new(l), right: Box::new(r) },
+    <l: Apply>  <r: NApply>  => Expr::Apply { left: Box::new(l), right: Box::new(r) },
     <l: NApply> <r: NApply> => Expr::Apply { left: Box::new(l), right: Box::new(r) },
 };
+
+List: Expr = {
+    NL<LSBrack> <v: SepList<Expr, NL<Comma>>> RSBrack => Expr::List(v.into())
+}
 
 Func: Expr = {
     // TODO: bring back type annotations
@@ -244,7 +249,7 @@ Str:      String = <"Str">  => <>.to_string();
 NL<T>: T     = <T> Newline?;
 
 SepList<T, S>: Vec<T> = {
-    <mut v: (<T> S)*> <e: T?> => match e {
+    <mut v: (<T> S)*> <e: NL<T>?> => match e {
         None => v,
         Some(e) => {
             v.push(e);

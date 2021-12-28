@@ -123,7 +123,7 @@ let main ~ do
     c2 1
     c2 1
 
-    for 2 100 fn |i| do
+    for 2 5000 fn |i| do
         if isPrime i then
             @dump i
         end

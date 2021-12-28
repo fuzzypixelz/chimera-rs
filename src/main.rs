@@ -10,18 +10,13 @@ mod value;
 extern crate lalrpop_util;
 lalrpop_mod!(#[allow(clippy::all)] pub grammar);
 
-use std::cell::RefCell;
-use std::env;
-use std::fs;
-use std::rc::Rc;
-
 use anyhow::Result;
-use ast::Def;
-use code::Code;
-use code::{Cont, Env};
+use std::{cell::RefCell, env, fs, rc::Rc};
+
+use code::{Code, Cont, Env};
 use lexer::Lexer;
 // use typechecker::Ctx;
-use ast::AST;
+use ast::{Def, Instr, AST};
 
 /*
     import core/io
@@ -63,9 +58,8 @@ fn main() -> Result<()> {
     for def in program.defs {
         match def {
             Def::Name(dname) => {
-                let compiled_expr = dname.expr.compile();
-                let rhs_value = compiled_expr.execute(env.clone(), cont.clone());
-                env.borrow_mut().names.insert(dname.name, rhs_value);
+                let instr = Instr::Let(dname);
+                instr.compile().execute(env.clone(), cont.clone());
             }
         }
     }

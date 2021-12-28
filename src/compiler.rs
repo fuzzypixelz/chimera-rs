@@ -21,7 +21,7 @@ impl<'c> Code<'c> for Expr {
             }
             Expr::List(list) => {
                 let compiled_list =
-                    list.into_iter().map(|i| i.compile()).collect::<Vec<_>>();
+                    list.into_iter().map(Code::compile).collect::<Vec<_>>();
                 CompiledCode::new(move |env, cont| {
                     Rc::new(Value::List({
                         compiled_list
@@ -39,7 +39,7 @@ impl<'c> Code<'c> for Expr {
                 // let (last, init) = body.split_last().unwrap();
                 let last = body.pop().unwrap();
                 let compiled_block =
-                    body.into_iter().map(|i| i.compile()).collect::<Vec<_>>();
+                    body.into_iter().map(Code::compile).collect::<Vec<_>>();
                 let compiled_expr = last.compile();
                 CompiledCode::new(move |env, cont| {
                     for instr in compiled_block.iter() {
@@ -54,23 +54,20 @@ impl<'c> Code<'c> for Expr {
                     .map(|(c, b)| {
                         (
                             c.compile(),
-                            b.into_iter().map(|i| i.compile()).collect::<Vec<_>>(),
+                            b.into_iter().map(Code::compile).collect::<Vec<_>>(),
                         )
                     })
                     .collect::<Vec<_>>();
                 CompiledCode::new(move |env, cont| {
                     let mut result = Rc::new(Value::Void);
                     for p in &compiled_branch {
+                        // FIXME: it's not very clear that p.0 is the condition and
+                        // p.1 the corresponding code.
                         if let Value::Bool(b) =
                             *p.0.execute(env.clone(), cont.clone()).clone()
                         {
                             if b {
                                 let (last, init) = p.1.split_last().unwrap();
-                                // let mut body = p.1.clone();
-                                // let last = body.pop().unwrap();
-                                // let compiled_block =
-                                // body.into_iter().map(|i| i.compile()); //.collect::<Vec<_>>();
-                                // let compiled_expr = last.compile();
                                 for i in init {
                                     i.execute(env.clone(), cont.clone());
                                 }
@@ -90,8 +87,17 @@ impl<'c> Code<'c> for Expr {
                 CompiledCode::new(move |env, _cont| {
                     Rc::new(Value::Func {
                         param: param.clone(),
+                        // The function's body is compiled the first time we come
+                        // accross its expression, then its expression itself
+                        // is transformed into a closure that remembers this
+                        // compiled block.
+                        // The .clone() is necessary because we are moving the
+                        // compiled body out of the closure (as a Value, functions
+                        // are first-class), but it would be too slow to duplicate
+                        // the Vec<CompiledCode> each time we want to use, so
+                        // it is fitting to wrap it in an Rc as it's read-only.
                         body: compiled_body.clone(),
-                        // Evaluating a function expression amounts to
+                        // Evaluating a function expression has the effect of
                         // capturing the current Env for future reference.
                         closure: env,
                     })
@@ -138,7 +144,7 @@ impl<'c> Code<'c> for Expr {
             }
             Expr::Intrinsic { name, args } => {
                 let compiled_args =
-                    args.into_iter().map(|i| i.compile()).collect::<Vec<_>>();
+                    args.into_iter().map(Code::compile).collect::<Vec<_>>();
                 match name.as_str() {
                     "dump" => CompiledCode::new(move |env, cont| {
                         for a in compiled_args.iter() {
@@ -307,7 +313,7 @@ impl<'c> Code<'c> for Instr {
             }
             Instr::Loop { body } => {
                 let compiled_block =
-                    body.into_iter().map(|i| i.compile()).collect::<Vec<_>>();
+                    body.into_iter().map(Code::compile).collect::<Vec<_>>();
                 CompiledCode::new(move |env, cont| {
                     // The loops variables keeps track of the level of
                     // nested loops we reached. Hence as long as its value

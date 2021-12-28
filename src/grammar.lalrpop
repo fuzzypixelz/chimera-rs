@@ -1,9 +1,5 @@
-use std::cell::RefCell;
-use std::rc::Rc;
-
 use crate::ast::*;
 use crate::lexer::{Tok, LexicalError};
-use crate::interpreter::Env;
 
 grammar<'input>(input: &'input str);
 
@@ -38,7 +34,6 @@ DName: DName = {
             let make_lambda = |p, b| Expr::Func { 
                     param: p,
                     body: b,
-                    closure: Rc::new(RefCell::new(Env::default())),
                     ann: vec!["Void".to_string()] 
             };
             let (head, tail) = ps.split_first().unwrap();
@@ -58,9 +53,9 @@ Ann: Ann = {
     SepList1<TypeName, Arrow>
 };
 
-AOP: AOP = {
-    Equal => AOP::Equal,
-    Tilde => AOP::Tilde
+AOP: AssignOp = {
+    Equal => AssignOp::Equal,
+    Tilde => AssignOp::Tilde
 };
 
 Instr: Instr = {
@@ -143,7 +138,7 @@ NInfix: Expr = {
 NApply: Expr = {
     LParen RParen  => Expr::Void,
     <Boolean>      => Expr::Bool(<>),
-    <I64>          => Expr::I64(<>),
+    <I64>          => Expr::Int(<>),
     <Name>         => Expr::Name(<>),
     <Str>          => Expr::Str(<>),
     <List>,
@@ -171,11 +166,9 @@ Func: Expr = {
         //     Some((n, t)) => (n, t.first().unwrap().to_owned())
         // };
         // a.insert(0, t);
-        let c = Rc::new(RefCell::new(Env::default()));
         Expr::Func { 
             param: n.unwrap_or("_".to_string()),
             body: b, 
-            closure: c, 
             ann: vec!["Void".to_string()] 
         }
     }

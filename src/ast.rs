@@ -1,8 +1,4 @@
-use std::cell::RefCell;
 use std::fmt::Debug;
-use std::rc::Rc;
-
-use crate::interpreter::Env;
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct AST {
@@ -20,7 +16,7 @@ pub struct DName {
     // A name is a reference to an expression,
     pub name: String,
     pub ann: Ann,
-    pub op: AOP,
+    pub op: AssignOp,
     pub expr: Expr,
 }
 
@@ -49,12 +45,12 @@ pub enum Instr {
     Var {
         name: String,
         ann: Ann,
-        op: AOP,
+        op: AssignOp,
         expr: Expr,
     }, // var i
     Assign {
         name: String,
-        op: AOP,
+        op: AssignOp,
         expr: Expr,
     }, // i = 0
     Loop {
@@ -74,21 +70,20 @@ pub enum Instr {
 pub enum Expr {
     // Primitives
     Void,     // ()
-    I64(i64), // 42
+    Int(i64), // 42
     // U64(u64),
     // F64(f64),
     Bool(bool),  // True / False
     Str(String), // "Hello, World\n"
     // Functions
     Name(String), // coolName
-    List(List),
+    List(Vec<Expr>),
     Block {
         body: Vec<Instr>,
     },
     Func {
         param: String,
         body: Vec<Instr>,
-        closure: Rc<RefCell<Env>>,
         ann: Ann,
     }, // do |x| x + 1 end
     Apply {
@@ -105,30 +100,7 @@ pub enum Expr {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub enum AOP {
+pub enum AssignOp {
     Equal,
     Tilde,
-}
-
-/// The representation of a "Cons List" within the interpreter,
-/// as the language isn't mature enough to have custom data types yet.
-/// This is a temporary way of having aggregate data types in Woland.
-#[derive(Debug, PartialEq, Clone)]
-pub enum List {
-    Cons(Box<Expr>, Box<Expr>),
-    Nil,
-}
-
-impl From<Vec<Expr>> for List {
-    fn from(mut item: Vec<Expr>) -> Self {
-        // FIXME: this is too slow!
-        if item.is_empty() {
-            List::Nil
-        } else {
-            // Could be better written, probably.
-            let tail = item.drain(1..).collect::<Vec<Expr>>();
-            let head = item.pop().unwrap();
-            List::Cons(Box::new(head), Box::new(Expr::List(tail.into())))
-        }
-    }
 }

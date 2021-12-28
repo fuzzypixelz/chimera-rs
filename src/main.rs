@@ -2,7 +2,9 @@ mod ast;
 // mod error;
 mod lexer;
 // mod typechecker;
-mod interpreter;
+mod code;
+mod compiler;
+mod value;
 
 #[macro_use]
 extern crate lalrpop_util;
@@ -15,7 +17,8 @@ use std::rc::Rc;
 
 use anyhow::Result;
 use ast::Def;
-use interpreter::{Cont, Env};
+use code::Code;
+use code::{Cont, Env};
 use lexer::Lexer;
 // use typechecker::Ctx;
 use ast::AST;
@@ -55,13 +58,14 @@ fn main() -> Result<()> {
         import.defs.extend(program.defs.into_iter());
         program = import;
     }
-    let env = Rc::new(RefCell::new(Env::new(&program.defs)));
+    let env = Rc::new(RefCell::new(Env::default()));
     let cont = Rc::new(RefCell::new(Cont::default()));
     for def in program.defs {
         match def {
             Def::Name(dname) => {
-                let rhs = dname.expr.eval(env.clone(), cont.clone());
-                env.borrow_mut().names.insert(dname.name, rhs);
+                let compiled_expr = dname.expr.compile();
+                let rhs_value = compiled_expr.execute(env.clone(), cont.clone());
+                env.borrow_mut().names.insert(dname.name, rhs_value);
             }
         }
     }

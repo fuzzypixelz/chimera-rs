@@ -1,93 +1,93 @@
-# The Woland core library.
+-- The Woland core library.
 
-# Infix operator are (always) left-associative,
-# so an expression of the form e1 OP e2 OP e3 is
-# equivalent to (e1 OP e2) OP e3. Partly (mostly)
-# because this is the simplest way to parse them :^)
-#: A -> (A -> B) -> B 
+-- Infix operator are (always) left-associative,
+-- so an expression of the form e1 OP e2 OP e3 is
+-- equivalent to (e1 OP e2) OP e3. Partly (mostly)
+-- because this is the simplest way to parse them :^)
+--: A -> (A -> B) -> B 
 let (|>) x f = f x
 
-#: (A -> B) -> A -> B 
+--: (A -> B) -> A -> B 
 let (<|) f x = f x
 
-# Sequence two functions
-#: (B -> C) -> (A -> B) -> A -> C
+-- Sequence two functions
+--: (B -> C) -> (A -> B) -> A -> C
 let (>>) f g x = f (g x)
 
-# (1) lambda-expression,this defintion expands to:
-# let (+) = fn |x: Int| -> Int -> Int do
-#     fn |y: Int| -> Int do
-#         @add x y
-#     end
-# end
-# The @-things and their args are special expressions
-# whoose meaning is determined by the interpreter.
-#: Int -> Int -> Int
+-- (1) lambda-expression,this defintion expands to:
+-- let (+) = fn |x: Int| -> Int -> Int do
+--     fn |y: Int| -> Int do
+--         @add x y
+--     end
+-- end
+-- The @-things and their args are special expressions
+-- whoose meaning is determined by the interpreter.
+--: Int -> Int -> Int
 let (+) x y = @add x y
 
-#: Int -> Int -> Int
+--: Int -> Int -> Int
 let (-) x y = @sub x y
 
-#: Int -> Int -> Int
+--: Int -> Int -> Int
 let (*) x y = @mul x y
 
-#: Int -> Int -> Int
+--: Int -> Int -> Int
 let (/) x y = @div x y
 
-#: Int -> Int -> Int
+--: Int -> Int -> Int
 let (%) x y = @mod x y
 
-#: A -> A -> Bool
+--: A -> A -> Bool
 let (==) x y = @cmp x y
 
-# (2) if-expression
-#: Bool -> Bool
+-- (2) if-expression
+--: Bool -> Bool
 let not x = if x then false else true end
 
-#: Bool -> Bool -> Bool
+--: Bool -> Bool -> Bool
 let (||) x y = if x then true else y end
 
-#: Bool -> Bool -> Bool
+--: Bool -> Bool -> Bool
 let (&&) x y = if x then y else false end
 
-#: A -> A -> Bool
+--: A -> A -> Bool
 let (!=) x y = not (@cmp x y)
 
-#: A -> Str -> A
+--: A -> Str -> A
 let (?) e n ~ do
     @dump "[debug] " n " = " e
     e
 end
 
-#: A -> A -> Void
+--: A -> A -> Void
 let (=?) x y ~ do
     if x != y then
         @dump "[assert] " x " != " y
     end
 end
 
-#: Int -> Int -> (A -> B) -> Void
+--: Int -> Int -> (A -> B) -> Void
 let for s e f = do
     var i = s
-    # this compiles down to the following:
-    # loop
-    #   if condition then
-    #       ...
-    #   else
-    #       break
-    #   end
-    #   # do-block
-    # end
+    -- this compiles down to the following:
+    -- loop
+    --   if condition then
+    --       ...
+    --   else
+    --       break
+    --   end
+    --   # do-block
+    -- end
     while i != e do
         f i
         i = i + 1
     end
 end
 
-#: A -> [A] -> [A]
+--: A -> [A] -> [A]
 let (::) x xs = @cons x xs
 
-#: (A -> B) -> [A] -> [B]
+--: (A -> B) -> [A] -> [B]
 let map f xs = do
     if xs == [] then
         []
@@ -98,7 +98,7 @@ let map f xs = do
     end
 end
 
-#: (A -> Bool) -> [A] -> [A]
+--: (A -> Bool) -> [A] -> [A]
 let filter p xs = do
     if xs == [] then
         []
@@ -113,7 +113,7 @@ let filter p xs = do
     end
 end
 
-#: (B -> A -> B) -> B -> [A] -> B
+--: (B -> A -> B) -> B -> [A] -> B
 let fold f acc xs = do
     if xs == [] then
         acc

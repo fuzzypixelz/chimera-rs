@@ -1,9 +1,9 @@
 import core
 
 let main ~ do
-    # According to perf (HotSpot), most of the
-    # time is spent on cloning expressions from
-    # the environement in the Env::get_name func.
+    -- According to perf (HotSpot), most of the
+    -- time is spent on cloning expressions from
+    -- the environement in the Env::get_name func.
     let n = 1000000
     var x = 0
     for 1 n fn |i| do

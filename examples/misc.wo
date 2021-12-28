@@ -1,6 +1,6 @@
 import core
 
-#: Int -> Int
+--: Int -> Int
 let fac n = do
     if n == 0 then
         1
@@ -10,8 +10,8 @@ let fac n = do
 end
 
 let fib n = do
-    # The recursive version is
-    # ridiculously slow!
+    -- The recursive version is
+    -- ridiculously slow!
     var x = 0
     var y = 1
     var z = 0
@@ -51,21 +51,21 @@ let counter_ = do
     end
 end
 
-# block expression, sequence of instructions;
-# should end in a Compute(Expr) instruction
-# NOTE: a block expression is different from a
-# fn || -> T do ... end as the former immediatly
-# reduces to an expression of the form T, but the latter
-# is a T -> T that only reduces to a T when applied to ()
+-- block expression, sequence of instructions;
+-- should end in a Compute(Expr) instruction
+-- NOTE: a block expression is different from a
+-- fn || -> T do ... end as the former immediatly
+-- reduces to an expression of the form T, but the latter
+-- is a T -> T that only reduces to a T when applied to ()
 let hundredEvenNumbers = do
-    # var-instruction
+    -- var-instruction
     var result = 0
-    # Loops are not expressions, as you cannot
-    # define them in a top-level let-instruction
-    # because there are no global variables.
+    -- Loops are not expressions, as you cannot
+    -- define them in a top-level let-instruction
+    -- because there are no global variables.
     for 0 100 fn |i| do
         if i % 2 == 0 then
-            # assignment-instruction
+            -- assignment-instruction
             result = result + i
         end
     end
@@ -93,10 +93,10 @@ let main ~ do
         @dump "fib " i " = " (fib i)
     end
 
-    # (4) application-expression
+    -- (4) application-expression
     fn |x| do x + 1 end 41
 
-    # (5) literal-expression
+    -- (5) literal-expression
     let void = ()
     let one = hundredEvenNumbers ? "hundredEvenNumbers"
     let truth = true
@@ -108,7 +108,7 @@ let main ~ do
         let hello = "Hello from local Env!"
         fn |_| do @dump hello end
     end
-    # @dump hello
+    -- @dump hello
     block ()
 
     let c1 = counter 1
@@ -131,7 +131,7 @@ let main ~ do
 
     fib >> fac <| 4 ? "fib(fac(4))"
 
-    # FIXME: block-expression + closure = global variable!
+    -- FIXME: block-expression + closure = global variable!
     let c3 = counter_
     let c4 = counter_
     @dump "c3:"

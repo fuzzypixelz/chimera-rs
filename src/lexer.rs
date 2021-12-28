@@ -150,7 +150,8 @@ impl<'input> Lexer<'input> {
     }
 
     fn operator(&mut self, start: usize) -> Spanned<'input> {
-        let (end, src) = self.take_while(start, |c| "/~!@#$%^&*-+=|:;?<>.,\\".contains(c));
+        let (end, src) =
+            self.take_while(start, |c| "/~!@#$%^&*-+=|:;?<>.,\\".contains(c));
         let token = if RESERVED_SYMBOLS.contains_key(src) {
             RESERVED_SYMBOLS[src]
         } else {
@@ -195,12 +196,21 @@ impl<'input> Iterator for Lexer<'input> {
                 c if c.is_uppercase() => Some(self.type_name(start)),
                 c if c.is_lowercase() || c == '_' => Some(self.name(start)),
                 '"' => Some(self.string(start)),
-                '#' => {
-                    self.take_while(start, |c| c != '\n');
-                    // Also consume all newlines that follow, they are irrelevant
-                    // for the syntax as the context is a comment.
-                    self.take_while(start, |c| c.is_whitespace());
-                    continue;
+                '-' => {
+                    self.chars.next(); // Consume the first hyphen
+                    if let Some(&(_, '-')) = self.chars.peek() {
+                        self.take_while(start, |c| c != '\n');
+                        // Also consume all newlines that follow, they are irrelevant
+                        // for the syntax as the context is a comment.
+                        self.take_while(start, |c| c.is_whitespace());
+                        continue;
+                    } else {
+                        // HACK: this is worse than it looks, as it uses the fact
+                        // that the already consumed hyphen will be part of an
+                        // operator, hence why we allow ourselves to start
+                        // the search done in the `take_while` call of operator.
+                        Some(self.operator(start))
+                    }
                 }
                 '(' => {
                     self.chars.next();

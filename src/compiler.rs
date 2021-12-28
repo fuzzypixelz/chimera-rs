@@ -32,6 +32,18 @@ impl<'c> Code<'c> for Expr {
                     })))
                 })
             }
+            Expr::Array(array) => {
+                let compiled_array =
+                    array.into_iter().map(Code::compile).collect::<Vec<_>>();
+                CompiledCode::new(move |env, cont| {
+                    Rc::new(RefCell::new(Value::Array({
+                        compiled_array
+                            .iter()
+                            .map(|i| i.execute(env.clone(), cont.clone()))
+                            .collect::<Vec<_>>()
+                    })))
+                })
+            }
             Expr::Name(name) => {
                 CompiledCode::new(move |env, _cont| Env::get_name(env, &name))
             }
@@ -278,6 +290,24 @@ impl<'c> Code<'c> for Expr {
                             }
                         } else {
                             panic!("Woland: can only get the tail of a list.");
+                        }
+                    }),
+                    "get" => CompiledCode::new(move |env, cont| {
+                        if let Value::Array(array) =
+                            &*compiled_args[0].execute(env.clone(), cont.clone()).borrow()
+                        {
+                            if let Value::Int(index) =
+                                *compiled_args[1].execute(env, cont).borrow()
+                            {
+                                array
+                                    .get(index.rem_euclid(array.len() as i64) as usize)
+                                    .unwrap()
+                                    .clone()
+                            } else {
+                                panic!("Woland: can only indexa arrays using integers.");
+                            }
+                        } else {
+                            panic!("Woland: can only call `get` on an array.");
                         }
                     }),
                     _ => CompiledCode::default(),

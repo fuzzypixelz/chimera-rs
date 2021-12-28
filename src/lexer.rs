@@ -45,6 +45,7 @@ pub enum Tok<'input> {
     Comma,
     Equal,
     Tilde,
+    Hash,
 
     LParen,
     RParen,
@@ -87,6 +88,7 @@ pub static RESERVED_SYMBOLS: phf::Map<&'static str, Tok> = phf::phf_map! {
     "!"   => Tok::Excl,
     "$"   => Tok::Dollar,
     "."   => Tok::Dot,
+    "#"   => Tok::Hash,
 };
 
 #[derive(Copy, Clone, Debug)]

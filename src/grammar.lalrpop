@@ -142,6 +142,7 @@ NApply: Expr = {
     <Name>         => Expr::Name(<>),
     <Str>          => Expr::Str(<>),
     <List>,
+    <Array>,
     <Func>,
     <Branch>,
     LParen <Expr> RParen,
@@ -153,7 +154,11 @@ Apply: Expr = {
 };
 
 List: Expr = {
-    NL<LSBrack> <v: SepList<Expr, NL<Comma>>> RSBrack => Expr::List(v.into())
+    NL<LSBrack> <v: SepList<Expr, NL<Comma>>> RSBrack => Expr::List(v)
+}
+
+Array: Expr = {
+    Hash NL<LSBrack> <v: SepList<Expr, NL<Comma>>> RSBrack => Expr::Array(v)
 }
 
 Func: Expr = {
@@ -258,6 +263,7 @@ extern {
         Comma     => Tok::Comma,
         Equal     => Tok::Equal,
         Tilde     => Tok::Tilde,
+        Hash      => Tok::Hash,
 
         LParen    => Tok::LParen,
         RParen    => Tok::RParen,

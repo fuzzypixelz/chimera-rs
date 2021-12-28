@@ -13,6 +13,7 @@ pub enum Value<'c> {
     Bool(bool),
     Str(String),
     List(List<'c>),
+    Array(Vec<WoValue<'c>>),
     Func {
         param: String,
         body: Rc<Vec<CompiledCode<'c>>>,

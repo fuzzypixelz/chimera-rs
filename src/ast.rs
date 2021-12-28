@@ -76,8 +76,9 @@ pub enum Expr {
     Bool(bool),  // True / False
     Str(String), // "Hello, World\n"
     // Functions
-    Name(String), // coolName
-    List(Vec<Expr>),
+    Name(String),     // coolName
+    List(Vec<Expr>),  // [1, 2, 3]
+    Array(Vec<Expr>), // #[1, 2, 3]
     Block {
         body: Vec<Instr>,
     },

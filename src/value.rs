@@ -2,7 +2,9 @@ use std::cell::RefCell;
 use std::fmt::Display;
 use std::rc::Rc;
 
-use crate::code::{CompiledCode, Env};
+use crate::code::{CompiledCode, WoEnv};
+
+pub type WoValue<'c> = Rc<RefCell<Value<'c>>>;
 
 #[derive(PartialEq)]
 pub enum Value<'c> {
@@ -14,8 +16,20 @@ pub enum Value<'c> {
     Func {
         param: String,
         body: Rc<Vec<CompiledCode<'c>>>,
-        closure: Rc<RefCell<Env<'c>>>,
+        closure: WoEnv<'c>,
     },
+}
+
+impl<'c> Default for Value<'c> {
+    fn default() -> Self {
+        Value::Void
+    }
+}
+
+impl<'c> From<Value<'c>> for Rc<RefCell<Value<'c>>> {
+    fn from(item: Value<'c>) -> Self {
+        Rc::new(RefCell::new(item))
+    }
 }
 
 impl<'c> PartialEq for CompiledCode<'c> {
@@ -31,12 +45,12 @@ impl<'c> PartialEq for CompiledCode<'c> {
 /// This is a temporary way of having aggregate data types in Woland.
 #[derive(Clone, PartialEq)]
 pub enum List<'c> {
-    Cons(Rc<Value<'c>>, Box<List<'c>>),
+    Cons(WoValue<'c>, Box<List<'c>>),
     Nil,
 }
 
-impl<'c> From<Vec<Rc<Value<'c>>>> for List<'c> {
-    fn from(mut item: Vec<Rc<Value<'c>>>) -> Self {
+impl<'c> From<Vec<WoValue<'c>>> for List<'c> {
+    fn from(mut item: Vec<WoValue<'c>>) -> Self {
         // FIXME: this is too slow!
         if item.is_empty() {
             List::Nil

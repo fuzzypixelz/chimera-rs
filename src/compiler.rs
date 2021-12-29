@@ -299,12 +299,32 @@ impl<'c> Code<'c> for Expr {
                             if let Value::Int(index) =
                                 *compiled_args[1].execute(env, cont).borrow()
                             {
-                                array
-                                    .get(index.rem_euclid(array.len() as i64) as usize)
-                                    .unwrap()
-                                    .clone()
+                                let wrapped_index =
+                                    index.rem_euclid(array.len() as i64) as usize;
+                                array.get(wrapped_index).unwrap().clone()
                             } else {
-                                panic!("Woland: can only indexa arrays using integers.");
+                                panic!("Woland: can only index arrays using integers.");
+                            }
+                        } else {
+                            panic!("Woland: can only call `get` on an array.");
+                        }
+                    }),
+                    "set" => CompiledCode::new(move |env, cont| {
+                        if let Value::Array(array) = &mut *compiled_args[0]
+                            .execute(env.clone(), cont.clone())
+                            .borrow_mut()
+                        {
+                            if let Value::Int(index) = *compiled_args[1]
+                                .execute(env.clone(), cont.clone())
+                                .borrow()
+                            {
+                                let wrapped_index =
+                                    index.rem_euclid(array.len() as i64) as usize;
+                                array[wrapped_index] =
+                                    compiled_args[2].execute(env, cont);
+                                Value::Void.into()
+                            } else {
+                                panic!("Woland: can only index arrays using integers.");
                             }
                         } else {
                             panic!("Woland: can only call `get` on an array.");

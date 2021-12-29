@@ -32,6 +32,34 @@ use ast::{Def, Instr, AST};
       dump 42
     end
 */
+
+fn parse_error(source: &str, label: &str, slice_label: &str, range: (usize, usize)) -> Error {
+    let snippet = Snippet {
+        title: Some(Annotation {
+            label: Some(label),
+            id: None,
+            annotation_type: AnnotationType::Error,
+        }),
+        footer: vec![],
+        slices: vec![Slice {
+            source: &source,
+            line_start: 0,
+            origin: None,
+            fold: true,
+            annotations: vec![SourceAnnotation {
+                label: slice_label,
+                annotation_type: AnnotationType::Error,
+                range,
+            }],
+        }],
+        opt: FormatOptions {
+            color: true,
+            ..Default::default()
+        },
+    };
+    Error::msg(DisplayList::from(snippet).to_string())
+}
+
 fn read_program(filename: String) -> Result<AST> {
     let source = fs::read_to_string(filename)
         .expect("Woland: error reading source file. You are on your own.");
@@ -40,86 +68,30 @@ fn read_program(filename: String) -> Result<AST> {
     match result {
         Ok(program) => Ok(program),
         Err(error) => match error {
-            ParseError::InvalidToken { location } => {
-                let snippet = Snippet {
-                    title: Some(Annotation {
-                        label: Some("invalid token"),
-                        id: None,
-                        annotation_type: AnnotationType::Error,
-                    }),
-                    footer: vec![],
-                    slices: vec![Slice {
-                        source: &source,
-                        line_start: 0,
-                        origin: None,
-                        fold: true,
-                        annotations: vec![SourceAnnotation {
-                            label: "invalid token",
-                            annotation_type: AnnotationType::Error,
-                            range: (location, location),
-                        }],
-                    }],
-                    opt: FormatOptions {
-                        color: true,
-                        ..Default::default()
-                    },
-                };
-                Err(Error::msg(DisplayList::from(snippet).to_string()))
-            }
+            ParseError::InvalidToken { location } => Err(parse_error(
+                &source,
+                "invalid token",
+                "invalid token",
+                (location, location),
+            )),
             ParseError::UnrecognizedEOF { location, expected } => {
                 let label = format!("unrecognized EOF, expected {}", expected.join(", "));
-                let snippet = Snippet {
-                    title: Some(Annotation {
-                        label: Some(label.as_str()),
-                        id: None,
-                        annotation_type: AnnotationType::Error,
-                    }),
-                    footer: vec![],
-                    slices: vec![Slice {
-                        source: &source,
-                        line_start: 0,
-                        origin: None,
-                        fold: true,
-                        annotations: vec![SourceAnnotation {
-                            label: "unrecognized EOF",
-                            annotation_type: AnnotationType::Error,
-                            range: (location, location),
-                        }],
-                    }],
-                    opt: FormatOptions {
-                        color: true,
-                        ..Default::default()
-                    },
-                };
-                Err(Error::msg(DisplayList::from(snippet).to_string()))
+                Err(parse_error(
+                    &source,
+                    label.as_str(),
+                    "unrecognized EOF",
+                    (location, location),
+                ))
             }
             ParseError::ExtraToken { token } => {
                 let label = format!("unexpected additonal token {}", token.1);
                 let slice_label = format!("found extra `{}`", token.1);
-                let snippet = Snippet {
-                    title: Some(Annotation {
-                        label: Some(label.as_str()),
-                        id: None,
-                        annotation_type: AnnotationType::Error,
-                    }),
-                    footer: vec![],
-                    slices: vec![Slice {
-                        source: &source,
-                        line_start: 0,
-                        origin: None,
-                        fold: true,
-                        annotations: vec![SourceAnnotation {
-                            label: slice_label.as_str(),
-                            annotation_type: AnnotationType::Error,
-                            range: (token.0, token.2),
-                        }],
-                    }],
-                    opt: FormatOptions {
-                        color: true,
-                        ..Default::default()
-                    },
-                };
-                Err(Error::msg(DisplayList::from(snippet).to_string()))
+                Err(parse_error(
+                    &source,
+                    label.as_str(),
+                    slice_label.as_str(),
+                    (token.0, token.2),
+                ))
             }
             ParseError::UnrecognizedToken { token, expected } => {
                 let label = format!(
@@ -128,30 +100,12 @@ fn read_program(filename: String) -> Result<AST> {
                     expected.join(", ")
                 );
                 let slice_label = format!("found `{}`", token.1);
-                let snippet = Snippet {
-                    title: Some(Annotation {
-                        label: Some(label.as_str()),
-                        id: None,
-                        annotation_type: AnnotationType::Error,
-                    }),
-                    footer: vec![],
-                    slices: vec![Slice {
-                        source: &source,
-                        line_start: 0,
-                        origin: None,
-                        fold: true,
-                        annotations: vec![SourceAnnotation {
-                            label: slice_label.as_str(),
-                            annotation_type: AnnotationType::Error,
-                            range: (token.0, token.2),
-                        }],
-                    }],
-                    opt: FormatOptions {
-                        color: true,
-                        ..Default::default()
-                    },
-                };
-                Err(Error::msg(DisplayList::from(snippet).to_string()))
+                Err(parse_error(
+                    &source,
+                    label.as_str(),
+                    slice_label.as_str(),
+                    (token.0, token.2),
+                ))
             }
             ParseError::User { .. } => unreachable!(),
         },
@@ -166,9 +120,8 @@ fn main() -> Result<()> {
         .with_context(|| format!("failed to parse source file `{}`", filename))?;
     for mut filename in program.module.imports {
         filename.push_str(".wo"); // The parser doesn't add the extension.
-        let mut import = read_program(filename.to_string()).with_context(|| {
-            format!("failed to parse imported source file `{}`", filename)
-        })?;
+        let mut import = read_program(filename.to_string())
+            .with_context(|| format!("failed to parse imported source file `{}`", filename))?;
         import.defs.extend(program.defs.into_iter());
         program = import;
     }

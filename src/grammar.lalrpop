@@ -179,7 +179,7 @@ Func: Expr = {
     }
 };
 
-I64: i64 = <"I64"> => match <> {
+I64: i64 = <"Int"> => match <> {
     Tok::IntLiteral(i)  => i,
     _ => panic!("unreacheable")
 };
@@ -189,9 +189,9 @@ Boolean: bool = {
     False => false
 };
 
-TypeName: String = <"type"> => <>.to_string();
+TypeName: String = <"Type"> => <>.to_string();
 Name:     String = {
-    <"name"> => <>.to_string(),
+    <"Name"> => <>.to_string(),
     LParen <OP> RParen
 };
 OP:       String = <"OP">   => format!("({})", <>).to_string();
@@ -222,11 +222,11 @@ extern {
     type Error = LexicalError;
     
     enum Tok<'input> {
-        "name"    => Tok::Name(<&'input str>),
-        "type"    => Tok::TypeName(<&'input str>),
+        "Name"    => Tok::Name(<&'input str>),
+        "Type"    => Tok::TypeName(<&'input str>),
         "OP"      => Tok::Operator(<&'input str>),
 
-        "I64"     => Tok::IntLiteral(i64),
+        "Int"     => Tok::IntLiteral(i64),
         "Str"     => Tok::StrLiteral(<&'input str>),
 
         Ellipsis  => Tok::Ellipsis,

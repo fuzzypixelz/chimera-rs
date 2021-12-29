@@ -28,6 +28,13 @@ impl<'c> Default for CompiledCode<'c> {
     }
 }
 
+impl<'c> std::fmt::Debug for CompiledCode<'c> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // Cannot debug-print closures.
+        write!(f, "[CompiledCode]")
+    }
+}
+
 pub type WoCont<'c> = Rc<RefCell<Cont>>;
 
 // A "Continuation" i.e the evaluator's state.
@@ -45,7 +52,7 @@ impl Cont {
 
 pub type WoEnv<'c> = Rc<RefCell<Env<'c>>>;
 
-#[derive(PartialEq, Clone, Default)]
+#[derive(Debug, PartialEq, Clone, Default)]
 pub struct Env<'c> {
     pub names: FnvHashMap<String, WoValue<'c>>,
     pub vars: FnvHashMap<String, WoValue<'c>>,

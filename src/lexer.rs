@@ -92,10 +92,9 @@ pub static RESERVED_SYMBOLS: phf::Map<&'static str, Tok> = phf::phf_map! {
 };
 
 #[derive(Copy, Clone, Debug)]
-pub enum LexicalError {
-    InvalidSyntax,
-}
+pub enum LexicalError {}
 
+use std::fmt::Display;
 use std::iter::Peekable;
 use std::str::CharIndices;
 use std::str::FromStr;
@@ -200,7 +199,7 @@ impl<'input> Iterator for Lexer<'input> {
                 '"' => Some(self.string(start)),
                 '-' => {
                     self.chars.next(); // Consume the first hyphen
-                    if let Some(&(_, '-')) = self.chars.peek() {
+                    if let Some(&(start, '-')) = self.chars.peek() {
                         self.take_while(start, |c| c != '\n');
                         // Also consume all newlines that follow, they are irrelevant
                         // for the syntax as the context is a comment.
@@ -246,5 +245,11 @@ impl<'input> Iterator for Lexer<'input> {
             };
         }
         None
+    }
+}
+
+impl<'input> Display for Tok<'input> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
     }
 }

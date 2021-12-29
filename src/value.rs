@@ -6,7 +6,7 @@ use crate::code::{CompiledCode, WoEnv};
 
 pub type WoValue<'c> = Rc<RefCell<Value<'c>>>;
 
-#[derive(PartialEq)]
+#[derive(Debug, PartialEq)]
 pub enum Value<'c> {
     Void,
     Int(i64),
@@ -44,7 +44,7 @@ impl<'c> PartialEq for CompiledCode<'c> {
 /// The representation of a "Cons List" within the interpreter,
 /// as the language isn't mature enough to have custom data types yet.
 /// This is a temporary way of having aggregate data types in Woland.
-#[derive(Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum List<'c> {
     Cons(WoValue<'c>, Box<List<'c>>),
     Nil,
@@ -67,10 +67,11 @@ impl<'c> From<Vec<WoValue<'c>>> for List<'c> {
 impl<'c> Display for Value<'c> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
+            Value::Void => write!(f, "()"),
             Value::Int(i) => write!(f, "{}", i),
             Value::Bool(b) => write!(f, "{}", b),
             Value::Str(s) => write!(f, "{}", s),
-            _other => write!(f, "unimplemented"),
+            _other => write!(f, "Value(unimplemented)"),
         }
     }
 }

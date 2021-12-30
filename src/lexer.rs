@@ -1,3 +1,10 @@
+use std::fmt::Display;
+use std::iter::Peekable;
+use std::str::CharIndices;
+use std::str::FromStr;
+
+use thiserror::Error;
+
 pub type Spanned<'input> = Result<(usize, Tok<'input>, usize), LexicalError>;
 
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -9,6 +16,7 @@ pub enum Tok<'input> {
 
     IntLiteral(i64),
     StrLiteral(&'input str),
+    CharLiteral(char),
 
     Ellipsis,
 
@@ -91,13 +99,11 @@ pub static RESERVED_SYMBOLS: phf::Map<&'static str, Tok> = phf::phf_map! {
     "#"   => Tok::Hash,
 };
 
-#[derive(Copy, Clone, Debug)]
-pub enum LexicalError {}
-
-use std::fmt::Display;
-use std::iter::Peekable;
-use std::str::CharIndices;
-use std::str::FromStr;
+#[derive(Error, Copy, Clone, Debug)]
+pub enum LexicalError {
+    #[error("Invalid syntax")]
+    InvalidSyntax,
+}
 
 pub struct Lexer<'input> {
     chars: Peekable<CharIndices<'input>>,
@@ -151,8 +157,7 @@ impl<'input> Lexer<'input> {
     }
 
     fn operator(&mut self, start: usize) -> Spanned<'input> {
-        let (end, src) =
-            self.take_while(start, |c| "/~!@#$%^&*-+=|:;?<>.,\\".contains(c));
+        let (end, src) = self.take_while(start, |c| "/~!@#$%^&*-+=|:;?<>.,\\".contains(c));
         let token = if RESERVED_SYMBOLS.contains_key(src) {
             RESERVED_SYMBOLS[src]
         } else {
@@ -173,6 +178,13 @@ impl<'input> Lexer<'input> {
         let (end, src) = self.take_while(start + 1, |b| b != '"');
         self.chars.next(); // Consume the ending double quotes.
         Ok((start, Tok::StrLiteral(src), end + 1))
+    }
+
+    fn character(&mut self, start: usize) -> Spanned<'input> {
+        self.chars.next();
+        let (_, src) = self.chars.next().ok_or(LexicalError::InvalidSyntax)?;
+        self.chars.next();
+        Ok((start, Tok::CharLiteral(src), start + 3))
     }
 }
 
@@ -196,6 +208,7 @@ impl<'input> Iterator for Lexer<'input> {
                 c if c.is_numeric() => Some(self.integer(start)),
                 c if c.is_uppercase() => Some(self.type_name(start)),
                 c if c.is_lowercase() || c == '_' => Some(self.name(start)),
+                '\'' => Some(self.character(start)),
                 '"' => Some(self.string(start)),
                 '-' => {
                     self.chars.next(); // Consume the first hyphen

@@ -10,18 +10,16 @@ impl<'c> Code<'c> for Expr {
     fn compile(self) -> CompiledCode<'c> {
         match self {
             Expr::Void => CompiledCode::new(move |_env, _cont| Value::Void.into()),
-            Expr::Int(int) => {
-                CompiledCode::new(move |_env, _cont| Value::Int(int).into())
-            }
+            Expr::Int(int) => CompiledCode::new(move |_env, _cont| Value::Int(int).into()),
             Expr::Bool(boolean) => {
                 CompiledCode::new(move |_env, _cont| Value::Bool(boolean).into())
             }
             Expr::Str(string) => {
                 CompiledCode::new(move |_env, _cont| Value::Str(string.clone()).into())
             }
+            Expr::Char(ch) => CompiledCode::new(move |_env, _cont| Value::Char(ch).into()),
             Expr::List(list) => {
-                let compiled_list =
-                    list.into_iter().map(Code::compile).collect::<Vec<_>>();
+                let compiled_list = list.into_iter().map(Code::compile).collect::<Vec<_>>();
                 CompiledCode::new(move |env, cont| {
                     Rc::new(RefCell::new(Value::List({
                         compiled_list
@@ -33,8 +31,7 @@ impl<'c> Code<'c> for Expr {
                 })
             }
             Expr::Array(array) => {
-                let compiled_array =
-                    array.into_iter().map(Code::compile).collect::<Vec<_>>();
+                let compiled_array = array.into_iter().map(Code::compile).collect::<Vec<_>>();
                 CompiledCode::new(move |env, cont| {
                     Rc::new(RefCell::new(Value::Array({
                         compiled_array
@@ -44,14 +41,11 @@ impl<'c> Code<'c> for Expr {
                     })))
                 })
             }
-            Expr::Name(name) => {
-                CompiledCode::new(move |env, _cont| Env::get_name(env, &name))
-            }
+            Expr::Name(name) => CompiledCode::new(move |env, _cont| Env::get_name(env, &name)),
             Expr::Block { mut body } => {
                 // let (last, init) = body.split_last().unwrap();
                 let last = body.pop().unwrap();
-                let compiled_block =
-                    body.into_iter().map(Code::compile).collect::<Vec<_>>();
+                let compiled_block = body.into_iter().map(Code::compile).collect::<Vec<_>>();
                 let compiled_expr = last.compile();
                 CompiledCode::new(move |env, cont| {
                     for instr in compiled_block.iter() {
@@ -75,9 +69,7 @@ impl<'c> Code<'c> for Expr {
                     for p in &compiled_branch {
                         // FIXME: it's not very clear that p.0 is the condition and
                         // p.1 the corresponding code.
-                        if let Value::Bool(b) =
-                            *p.0.execute(env.clone(), cont.clone()).borrow()
-                        {
+                        if let Value::Bool(b) = *p.0.execute(env.clone(), cont.clone()).borrow() {
                             if b {
                                 let (last, init) = p.1.split_last().unwrap();
                                 for i in init {
@@ -135,8 +127,7 @@ impl<'c> Code<'c> for Expr {
                         // of the Function expression. This might by the Env of another
                         // function application or a block expression.
                         let fenv = Rc::new(RefCell::new(Env::default()));
-                        let input_value =
-                            compiled_input.execute(env.clone(), cont.clone());
+                        let input_value = compiled_input.execute(env.clone(), cont.clone());
                         fenv.borrow_mut()
                             .names
                             .insert(param.to_string(), input_value);
@@ -156,8 +147,7 @@ impl<'c> Code<'c> for Expr {
                 })
             }
             Expr::Intrinsic { name, args } => {
-                let compiled_args =
-                    args.into_iter().map(Code::compile).collect::<Vec<_>>();
+                let compiled_args = args.into_iter().map(Code::compile).collect::<Vec<_>>();
                 match name.as_str() {
                     "dump" => CompiledCode::new(move |env, cont| {
                         for a in compiled_args.iter() {
@@ -168,9 +158,9 @@ impl<'c> Code<'c> for Expr {
                     }),
                     "read" => CompiledCode::new(move |_env, _cont| {
                         let mut buffer = String::new();
-                        io::stdin().read_to_string(&mut buffer).expect(
-                            "Woland: error reading from stdin. You are on your own.",
-                        );
+                        io::stdin()
+                            .read_to_string(&mut buffer)
+                            .expect("Woland: error reading from stdin. You are on your own.");
                         Value::Str(buffer).into()
                     }),
                     "cmp" => CompiledCode::new(move |env, cont| {
@@ -184,9 +174,7 @@ impl<'c> Code<'c> for Expr {
                         if let Value::Int(l) =
                             *compiled_args[0].execute(env.clone(), cont.clone()).borrow()
                         {
-                            if let Value::Int(r) =
-                                *compiled_args[1].execute(env, cont).borrow()
-                            {
+                            if let Value::Int(r) = *compiled_args[1].execute(env, cont).borrow() {
                                 Value::Int(l + r).into()
                             } else {
                                 unreachable!()
@@ -199,9 +187,7 @@ impl<'c> Code<'c> for Expr {
                         if let Value::Int(l) =
                             *compiled_args[0].execute(env.clone(), cont.clone()).borrow()
                         {
-                            if let Value::Int(r) =
-                                *compiled_args[1].execute(env, cont).borrow()
-                            {
+                            if let Value::Int(r) = *compiled_args[1].execute(env, cont).borrow() {
                                 Value::Int(l - r).into()
                             } else {
                                 unreachable!()
@@ -214,9 +200,7 @@ impl<'c> Code<'c> for Expr {
                         if let Value::Int(l) =
                             *compiled_args[0].execute(env.clone(), cont.clone()).borrow()
                         {
-                            if let Value::Int(r) =
-                                *compiled_args[1].execute(env, cont).borrow()
-                            {
+                            if let Value::Int(r) = *compiled_args[1].execute(env, cont).borrow() {
                                 Value::Int(l * r).into()
                             } else {
                                 unreachable!()
@@ -229,9 +213,7 @@ impl<'c> Code<'c> for Expr {
                         if let Value::Int(l) =
                             *compiled_args[0].execute(env.clone(), cont.clone()).borrow()
                         {
-                            if let Value::Int(r) =
-                                *compiled_args[1].execute(env, cont).borrow()
-                            {
+                            if let Value::Int(r) = *compiled_args[1].execute(env, cont).borrow() {
                                 Value::Int(l / r).into()
                             } else {
                                 unreachable!()
@@ -244,9 +226,7 @@ impl<'c> Code<'c> for Expr {
                         if let Value::Int(l) =
                             *compiled_args[0].execute(env.clone(), cont.clone()).borrow()
                         {
-                            if let Value::Int(r) =
-                                *compiled_args[1].execute(env, cont).borrow()
-                            {
+                            if let Value::Int(r) = *compiled_args[1].execute(env, cont).borrow() {
                                 Value::Int(l % r).into()
                             } else {
                                 unreachable!()
@@ -269,9 +249,7 @@ impl<'c> Code<'c> for Expr {
                         }
                     }),
                     "head" => CompiledCode::new(move |env, cont| {
-                        if let Value::List(l) =
-                            &*compiled_args[0].execute(env, cont).borrow()
-                        {
+                        if let Value::List(l) = &*compiled_args[0].execute(env, cont).borrow() {
                             match l {
                                 List::Nil => panic!("Woland: head: empty list."),
                                 List::Cons(h, _) => h.clone(),
@@ -281,9 +259,7 @@ impl<'c> Code<'c> for Expr {
                         }
                     }),
                     "tail" => CompiledCode::new(move |env, cont| {
-                        if let Value::List(l) =
-                            &*compiled_args[0].execute(env, cont).borrow()
-                        {
+                        if let Value::List(l) = &*compiled_args[0].execute(env, cont).borrow() {
                             match l {
                                 List::Nil => panic!("Woland: head: empty list."),
                                 List::Cons(_, t) => Value::List(*t.clone()).into(),
@@ -296,11 +272,9 @@ impl<'c> Code<'c> for Expr {
                         if let Value::Array(array) =
                             &*compiled_args[0].execute(env.clone(), cont.clone()).borrow()
                         {
-                            if let Value::Int(index) =
-                                *compiled_args[1].execute(env, cont).borrow()
+                            if let Value::Int(index) = *compiled_args[1].execute(env, cont).borrow()
                             {
-                                let wrapped_index =
-                                    index.rem_euclid(array.len() as i64) as usize;
+                                let wrapped_index = index.rem_euclid(array.len() as i64) as usize;
                                 array.get(wrapped_index).unwrap().clone()
                             } else {
                                 panic!("Woland: can only index arrays using integers.");
@@ -314,20 +288,37 @@ impl<'c> Code<'c> for Expr {
                             .execute(env.clone(), cont.clone())
                             .borrow_mut()
                         {
-                            if let Value::Int(index) = *compiled_args[1]
-                                .execute(env.clone(), cont.clone())
-                                .borrow()
+                            if let Value::Int(index) =
+                                *compiled_args[1].execute(env.clone(), cont.clone()).borrow()
                             {
-                                let wrapped_index =
-                                    index.rem_euclid(array.len() as i64) as usize;
-                                array[wrapped_index] =
-                                    compiled_args[2].execute(env, cont);
+                                let wrapped_index = index.rem_euclid(array.len() as i64) as usize;
+                                array[wrapped_index] = compiled_args[2].execute(env, cont);
                                 Value::Void.into()
                             } else {
                                 panic!("Woland: can only index arrays using integers.");
                             }
                         } else {
                             panic!("Woland: can only call `get` on an array.");
+                        }
+                    }),
+                    "push" => CompiledCode::new(move |env, cont| {
+                        if let Value::Array(array) = &mut *compiled_args[0]
+                            .execute(env.clone(), cont.clone())
+                            .borrow_mut()
+                        {
+                            array.push(compiled_args[1].execute(env, cont));
+                            Value::Void.into()
+                        } else {
+                            panic!("Woland: can only call `push` on an array.");
+                        }
+                    }),
+                    "len" => CompiledCode::new(move |env, cont| {
+                        if let Value::Array(array) =
+                            &*compiled_args[0].execute(env.clone(), cont.clone()).borrow()
+                        {
+                            Value::Int(array.len() as i64).into()
+                        } else {
+                            panic!("Woland: can only call `push` on an array.");
                         }
                     }),
                     _ => CompiledCode::default(),
@@ -379,8 +370,7 @@ impl<'c> Code<'c> for Instr {
                 })
             }
             Instr::Loop { body } => {
-                let compiled_block =
-                    body.into_iter().map(Code::compile).collect::<Vec<_>>();
+                let compiled_block = body.into_iter().map(Code::compile).collect::<Vec<_>>();
                 CompiledCode::new(move |env, cont| {
                     // The loops variables keeps track of the level of
                     // nested loops we reached. Hence as long as its value

@@ -13,6 +13,7 @@ syn match   woComment   "--.*$" contains=woTodo
 syn match   woNumber    '\d\+'
 syn match   woNumber    '[-+]\d\+'
 syn match   woString    '"[^"]*"'
+syn match   woChar      "'.'"
 syn match   woVoid      '(\s*)'
 syn match   woEllipsis  '\.\.\.'
 syn keyword woBool      true false
@@ -36,6 +37,7 @@ hi def link woKeywords  Keyword
 hi def link woComment   Comment
 hi def link woNumber    Number
 hi def link woString    String
+hi def link woChar      Character
 hi def link woBool      Boolean
 hi def link woVoid      Constant
 hi def link woEllipsis  Error

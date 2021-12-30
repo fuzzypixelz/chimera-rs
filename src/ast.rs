@@ -75,6 +75,7 @@ pub enum Expr {
     // F64(f64),
     Bool(bool),  // True / False
     Str(String), // "Hello, World\n"
+    Char(char),  // 'c'
     // Functions
     Name(String),     // coolName
     List(Vec<Expr>),  // [1, 2, 3]

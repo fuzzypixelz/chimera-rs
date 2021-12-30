@@ -141,6 +141,7 @@ NApply: Expr = {
     <I64>          => Expr::Int(<>),
     <Name>         => Expr::Name(<>),
     <Str>          => Expr::Str(<>),
+    <Char>         => Expr::Char(<>),
     <List>,
     <Array>,
     <Func>,
@@ -181,6 +182,11 @@ Func: Expr = {
 
 I64: i64 = <"Int"> => match <> {
     Tok::IntLiteral(i)  => i,
+    _ => panic!("unreacheable")
+};
+
+Char: char = <"Char"> => match <> {
+    Tok::CharLiteral(c)  => c,
     _ => panic!("unreacheable")
 };
 
@@ -228,6 +234,7 @@ extern {
 
         "Int"     => Tok::IntLiteral(i64),
         "Str"     => Tok::StrLiteral(<&'input str>),
+        "Char"    => Tok::CharLiteral(char),
 
         Ellipsis  => Tok::Ellipsis,
 

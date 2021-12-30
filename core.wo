@@ -234,8 +234,5 @@ let tests = do
     any ((==) 3) [1, 2, 3] ?= true
     all ((==) 3) [1, 2, 3] ?= false
 
-    drop 3 (repeat () 10) ?= repeat () 7
-    take 3 (repeat () 10) ?= repeat () 3
-
-    1 .. 3 |> println
+    take 3 (1..10) ^ drop 3 (1..10) ?= (1..10)
 end

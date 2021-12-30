@@ -6,8 +6,8 @@ use crate::ast::{DName, Expr, Instr};
 use crate::code::{Code, CompiledCode, Env};
 use crate::value::{List, Value};
 
-impl<'c> Code<'c> for Expr {
-    fn compile(self) -> CompiledCode<'c> {
+impl Code for Expr {
+    fn compile(self) -> CompiledCode {
         match self {
             Expr::Void => CompiledCode::new(move |_env, _cont| Value::Void.into()),
             Expr::Int(int) => CompiledCode::new(move |_env, _cont| Value::Int(int).into()),
@@ -328,8 +328,8 @@ impl<'c> Code<'c> for Expr {
     }
 }
 
-impl<'c> Code<'c> for Instr {
-    fn compile(self) -> CompiledCode<'c> {
+impl Code for Instr {
+    fn compile(self) -> CompiledCode {
         match self {
             Instr::Compute(expr) => {
                 let compiled_expr = expr.compile();

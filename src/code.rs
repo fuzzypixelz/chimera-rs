@@ -6,36 +6,36 @@ use crate::value::WoValue;
 
 /// A data-type is `Code` if it can produce a function from `(Env, Cont)` to `Value`,
 /// this Fn is used to (sort of) JIT compile `Expr`'s and `Instr`'s to reusable bits.
-pub trait Code<'c> {
-    fn compile(self) -> CompiledCode<'c>;
+pub trait Code {
+    fn compile(self) -> CompiledCode;
 }
 
-pub struct CompiledCode<'c>(Box<dyn 'c + Fn(WoEnv<'c>, WoCont<'c>) -> WoValue<'c>>);
+pub struct CompiledCode(Box<dyn Fn(WoEnv, WoCont) -> WoValue>);
 
-impl<'c> CompiledCode<'c> {
-    pub fn new(closure: impl 'c + Fn(WoEnv<'c>, WoCont<'c>) -> WoValue<'c>) -> Self {
+impl CompiledCode {
+    pub fn new(closure: impl 'static + Fn(WoEnv, WoCont) -> WoValue) -> Self {
         Self(Box::new(closure))
     }
 
-    pub fn execute(&self, env: WoEnv<'c>, cont: WoCont<'c>) -> WoValue<'c> {
+    pub fn execute(&self, env: WoEnv, cont: WoCont) -> WoValue {
         self.0(env, cont)
     }
 }
 
-impl<'c> Default for CompiledCode<'c> {
+impl Default for CompiledCode {
     fn default() -> Self {
         CompiledCode::new(|_env, _cont| WoValue::default())
     }
 }
 
-impl<'c> std::fmt::Debug for CompiledCode<'c> {
+impl std::fmt::Debug for CompiledCode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // Cannot debug-print closures.
         write!(f, "[CompiledCode]")
     }
 }
 
-pub type WoCont<'c> = Rc<RefCell<Cont>>;
+pub type WoCont = Rc<RefCell<Cont>>;
 
 // A "Continuation" i.e the evaluator's state.
 #[derive(Clone)]
@@ -50,18 +50,18 @@ impl Cont {
     }
 }
 
-pub type WoEnv<'c> = Rc<RefCell<Env<'c>>>;
+pub type WoEnv = Rc<RefCell<Env>>;
 
 #[derive(Debug, PartialEq, Clone, Default)]
-pub struct Env<'c> {
-    pub names: FnvHashMap<String, WoValue<'c>>,
-    pub vars: FnvHashMap<String, WoValue<'c>>,
-    pub outer: Option<WoEnv<'c>>,
+pub struct Env {
+    pub names: FnvHashMap<String, WoValue>,
+    pub vars: FnvHashMap<String, WoValue>,
+    pub outer: Option<WoEnv>,
 }
 
-impl<'c> Env<'c> {
+impl Env {
     /// Get the first Env containing `name`, this was we can mutate the var directly.
-    pub fn get_var_env(env: WoEnv<'c>, name: &str) -> WoEnv<'c> {
+    pub fn get_var_env(env: WoEnv, name: &str) -> WoEnv {
         if !env.borrow().vars.contains_key(name) {
             match env.borrow().outer.clone() {
                 None => {
@@ -75,7 +75,7 @@ impl<'c> Env<'c> {
     }
 
     /// Get the eval'd expression of `name`.
-    pub fn get_name(env: WoEnv<'c>, name: &str) -> WoValue<'c> {
+    pub fn get_name(env: WoEnv, name: &str) -> WoValue {
         if !env.borrow().names.contains_key(name) {
             if !env.borrow().vars.contains_key(name) {
                 match env.borrow().outer.clone() {

@@ -4,37 +4,37 @@ use std::rc::Rc;
 
 use crate::code::{CompiledCode, WoEnv};
 
-pub type WoValue<'c> = Rc<RefCell<Value<'c>>>;
+pub type WoValue = Rc<RefCell<Value>>;
 
 #[derive(Debug, PartialEq)]
-pub enum Value<'c> {
+pub enum Value {
     Void,
     Int(i64),
     Bool(bool),
     Char(char),
     Str(String),
-    List(List<'c>),
-    Array(Vec<WoValue<'c>>),
+    List(List),
+    Array(Vec<WoValue>),
     Func {
         param: String,
-        body: Rc<Vec<CompiledCode<'c>>>,
-        closure: WoEnv<'c>,
+        body: Rc<Vec<CompiledCode>>,
+        closure: WoEnv,
     },
 }
 
-impl<'c> Default for Value<'c> {
+impl Default for Value {
     fn default() -> Self {
         Value::Void
     }
 }
 
-impl<'c> From<Value<'c>> for Rc<RefCell<Value<'c>>> {
-    fn from(item: Value<'c>) -> Self {
+impl From<Value> for Rc<RefCell<Value>> {
+    fn from(item: Value) -> Self {
         Rc::new(RefCell::new(item))
     }
 }
 
-impl<'c> PartialEq for CompiledCode<'c> {
+impl PartialEq for CompiledCode {
     fn eq(&self, _other: &Self) -> bool {
         // We don't provide comparison of
         // functions at the language level.
@@ -46,13 +46,13 @@ impl<'c> PartialEq for CompiledCode<'c> {
 /// as the language isn't mature enough to have custom data types yet.
 /// This is a temporary way of having aggregate data types in Woland.
 #[derive(Debug, Clone, PartialEq)]
-pub enum List<'c> {
-    Cons(WoValue<'c>, Box<List<'c>>),
+pub enum List {
+    Cons(WoValue, Box<List>),
     Nil,
 }
 
-impl<'c> From<Vec<WoValue<'c>>> for List<'c> {
-    fn from(mut item: Vec<WoValue<'c>>) -> Self {
+impl From<Vec<WoValue>> for List {
+    fn from(mut item: Vec<WoValue>) -> Self {
         // FIXME: this is too slow!
         if item.is_empty() {
             List::Nil
@@ -65,9 +65,9 @@ impl<'c> From<Vec<WoValue<'c>>> for List<'c> {
     }
 }
 
-// impl<'c> From<List<'c>> for Vec<WoValue<'c>> {
-impl<'c> Into<Vec<WoValue<'c>>> for List<'c> {
-    fn into(mut self) -> Vec<WoValue<'c>> {
+// impl From<List> for Vec<WoValue> {
+impl Into<Vec<WoValue>> for List {
+    fn into(mut self) -> Vec<WoValue> {
         let mut result = Vec::new();
         loop {
             match self {
@@ -81,7 +81,7 @@ impl<'c> Into<Vec<WoValue<'c>>> for List<'c> {
     }
 }
 
-impl<'c> Display for Value<'c> {
+impl Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             Value::Void => write!(f, "()"),
@@ -103,12 +103,12 @@ impl<'c> Display for Value<'c> {
     }
 }
 
-impl<'c> Display for List<'c> {
+impl Display for List {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
             "{}",
-            Into::<Vec<WoValue<'c>>>::into(self.to_owned())
+            Into::<Vec<WoValue>>::into(self.to_owned())
                 .iter()
                 .map(|v| v.borrow().to_string())
                 .collect::<Vec<_>>()

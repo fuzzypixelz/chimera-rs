@@ -11,8 +11,8 @@ let (|>) x f = f x
 let (<|) f x = f x
 
 -- Sequence two functions
---: (B -> C) -> (A -> B) -> A -> C
-let (>>) f g x = f (g x)
+--: (A -> B) -> (B -> C) -> A -> C
+let (>>) f g x = g (f x)
 
 -- (1) lambda-expression,this defintion expands to:
 -- let (+) = fn |x: Int| -> Int -> Int do
@@ -60,7 +60,7 @@ let (?) e n ~ do
 end
 
 --: A -> A -> Void
-let (=?) x y ~ do
+let (?=) x y ~ do
     if x != y then
         @dump "[assert] " x " != " y
     end
@@ -87,49 +87,155 @@ end
 --: A -> [A] -> [A]
 let (::) x xs = @cons x xs
 
---: (A -> B) -> [A] -> [B]
-let map f xs = do
-    if xs == [] then
-        []
-    else
-        let h = @head xs
-        let t = @tail xs
-        f h :: map f t
-    end
-end
-
---: (A -> Bool) -> [A] -> [A]
-let filter p xs = do
-    if xs == [] then
-        []
-    else
-        let h = @head xs
-        let t = @tail xs
-        if p h then
-            h :: filter p t
-        else
-            filter p t
-        end
-    end
-end
-
 --: (B -> A -> B) -> B -> [A] -> B
-let fold f acc xs = do
+let foldl f acc xs = do
     if xs == [] then
         acc
     else
         let h = @head xs
         let t = @tail xs
-        fold f (f acc h) t
+        foldl f (f acc h) t
+    end
+end
+
+--: (A -> B -> B) -> B -> [A] -> B
+let foldr f acc xs = do
+    if xs == [] then
+        acc
+    else
+        let h = @head xs
+        let t = @tail xs
+        f h (foldr f acc t)
+    end
+end
+
+--: (A -> B) -> [A] -> [B]
+let map f xs = do
+    let g x acc = f x :: acc
+    foldr g [] xs
+end
+
+--: (A -> Bool) -> [A] -> [A]
+let filter p xs = do
+    let f x acc = if p x then
+        x :: acc
+    else
+        acc
+    end
+    foldr f [] xs
+end
+
+--: (A -> B -> C) -> (B -> A -> C)
+let flip f x y = f y x
+
+--: A -> B -> A
+let const x y = x
+
+--: [A] -> [A]
+let reverse xs = foldl (flip (::)) [] xs
+
+--: [A] -> [A] -> [A]
+let (^) xs ys = foldr (::) ys xs
+
+--: [[A]] -> [A]
+let concat xs = foldr (^) [] xs
+
+--: (A -> [B]) -> [A] -> [B]
+let concatMap f xs = map f xs |> concat
+
+--: [A] -> Int
+let len xs = foldr (const ((+) 1)) 0 xs
+
+--: [A] -> Bool
+let any p xs = do
+    let f x acc = p x || acc
+    foldr f false xs
+end
+
+--: [A] -> Bool
+let all p xs = do
+    let f x acc = p x && acc
+    foldr f true xs
+end
+
+--: [A] -> Void
+let println x = @dump x
+
+--: Int -> [A]
+let drop n xs = do
+    if n == 0 then
+        xs
+    else
+        drop (n - 1) (@tail xs)
+    end
+end
+
+--: Int -> [A]
+let take n xs = do
+    if n == 0 then
+        []
+    else
+        let h = @head xs
+        let t = @tail xs
+        h :: take (n - 1) t
+    end
+end
+
+--: (A -> Bool) -> [A] -> [A]
+let takeWhile p xs = do
+    let f x acc = if p x then
+        x :: acc
+    else
+        []
+    end
+    foldr f [] xs
+end
+
+--: Void -> Void
+let hcf _ = do
+    println "Halt and Catch Fire!"
+    0 / 0
+end
+
+--: Int -> Int -> [Int]
+let (..) s e = do
+    if s == e then
+        []
+    else
+         s + 1 .. e |> (::) s
     end
 end
 
 let tests = do
-    map ((+) 1) [1, 2, 3] =? [2, 3, 4]
+    map ((+) 1) [1, 2, 3] ?= [2, 3, 4]
 
-    let sum xs = fold (+) 0 xs
-    sum [1, 2, 3] =? 6
+    let sum xs = foldr (+) 0 xs
+    sum [1, 2, 3] ?= 6
 
     let even x = x % 2 == 0
-    filter even [1, 2, 3, 4] =? [2, 4]
+    filter even [1, 2, 3, 4] ?= [2, 4]
+
+    reverse [1, 2, 3] ?= [3, 2, 1]
+
+    [1, 2] ^ [3] ?= [1, 2, 3]
+
+    concat [[1], [2], [3]] ?= [1, 2, 3]
+
+    let repeat x y = do
+        if y == 0 then
+            []
+        else
+            x :: repeat x (y - 1)
+        end
+    end
+    repeat 0 3 ?= [0, 0, 0]
+    concatMap (repeat 1) [1, 2, 3] |> len ?= sum [1, 2, 3]
+
+    any ((==) 3) [1, 2, 3] ?= true
+    all ((==) 3) [1, 2, 3] ?= false
+
+    drop 3 (repeat () 10) ?= repeat () 7
+    take 3 (repeat () 10) ?= repeat () 3
+
+    1 .. 3 |> println
 end

@@ -11,6 +11,7 @@ pub enum Value<'c> {
     Void,
     Int(i64),
     Bool(bool),
+    Char(char),
     Str(String),
     List(List<'c>),
     Array(Vec<WoValue<'c>>),
@@ -64,6 +65,22 @@ impl<'c> From<Vec<WoValue<'c>>> for List<'c> {
     }
 }
 
+// impl<'c> From<List<'c>> for Vec<WoValue<'c>> {
+impl<'c> Into<Vec<WoValue<'c>>> for List<'c> {
+    fn into(mut self) -> Vec<WoValue<'c>> {
+        let mut result = Vec::new();
+        loop {
+            match self {
+                List::Cons(v, l) => {
+                    result.push(v);
+                    self = *l;
+                }
+                List::Nil => break result,
+            }
+        }
+    }
+}
+
 impl<'c> Display for Value<'c> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
@@ -71,7 +88,42 @@ impl<'c> Display for Value<'c> {
             Value::Int(i) => write!(f, "{}", i),
             Value::Bool(b) => write!(f, "{}", b),
             Value::Str(s) => write!(f, "{}", s),
-            _other => write!(f, "Value(unimplemented)"),
+            Value::Char(c) => write!(f, "'{}'", c),
+            Value::List(l) => write!(f, "[{}]", l),
+            Value::Array(a) => write!(
+                f,
+                "#[{}]",
+                a.iter()
+                    .map(|v| v.borrow().to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+            Value::Func { .. } => write!(f, "{:#?}", self),
         }
+    }
+}
+
+impl<'c> Display for List<'c> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            Into::<Vec<WoValue<'c>>>::into(self.to_owned())
+                .iter()
+                .map(|v| v.borrow().to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn list_into_vec() {
+        let list: Vec<WoValue> = List::Cons(Value::Int(1).into(), Box::new(List::Nil)).into();
+        assert_eq!(list, vec![Value::Int(1).into()])
     }
 }

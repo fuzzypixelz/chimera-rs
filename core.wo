@@ -53,15 +53,24 @@ let (&&) x y = if x then y else false end
 --: a -> a -> Bool
 let (!=) x y = not (x == y)
 
+let println x : forall a . a -> Void = @dump x
+
+let hcf _ : Void -> Void = do
+    println "Halt and Catch Fire!"
+    0 / 0
+end
+
 let (?) e n : forall a . a -> Str -> a ~ do
     @dump "[debug] " n " = " e
     e
 end
 
---: a -> a -> Void
 let (?=) x y : forall a . a -> a -> Void ~ do
     if x != y then
-        @dump "[assert] " x " != " y
+        @dump "[assert] failed equality check:"
+        @dump "[assert] left  = " x
+        @dump "[assert] right = " y
+        hcf ()
     end
 end
 
@@ -157,8 +166,6 @@ let all p xs = do
     foldr f true xs
 end
 
-let println x : forall a . a -> Void = @dump x
-
 let drop n xs = do
     if n == 0 then
         xs
@@ -186,11 +193,6 @@ let takeWhile p xs = do
         []
     end
     foldr f [] xs
-end
-
-let hcf _ : Void -> Void = do
-    println "Halt and Catch Fire!"
-    0 / 0
 end
 
 --: Int -> Int -> [Int]

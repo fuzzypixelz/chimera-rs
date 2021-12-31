@@ -223,7 +223,7 @@ Array: Expr = {
 }
 
 Func: Expr = {
-    Pipe <ps: Name+> NL<Pipe> <e: Infix> => {
+    Pipe <ps: Name+> NL<Pipe> <e: Expr> => {
         let mut lambda = e;
         let make_lambda = |p, e| Expr::Func { 
                 param: p,

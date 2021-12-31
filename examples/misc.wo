@@ -15,11 +15,11 @@ let fib n = do
     var x = 0
     var y = 1
     var z = 0
-    for 0 n fn |_| do
+    for 0 n (|_| do
         z = x + y
         x = y
         y = z
-    end
+    end)
     x
 end
 
@@ -27,8 +27,8 @@ let isPrime n = do
     let l = n / 2 + 1
     var prime = true
     var i = 2
-    while i != l do
-        if n % i == 0 then
+    loop
+        if n % i == 0 || n == i then
             prime = false 
             break
         end
@@ -39,14 +39,14 @@ end
 
 let counter init = do
     var i = init
-    fn |inc| do
+    |inc| do
         i = i ? "old i" + inc ? "new i"
     end
 end
 
 let counter_ = do
     var i = 0
-    fn |inc| do
+    |inc| do
         i = i ? "old i" + inc ? "new i"
     end
 end
@@ -63,12 +63,12 @@ let hundredEvenNumbers = do
     -- Loops are not expressions, as you cannot
     -- define them in a top-level let-instruction
     -- because there are no global variables.
-    for 0 100 fn |i| do
+    for 0 100 (|i| do
         if i % 2 == 0 then
             -- assignment-instruction
             result = result + i
         end
-    end
+    end)
     result
 end
 
@@ -85,16 +85,16 @@ let fizzBuzz n ~ do
 end
 
 let main ~ do
-    for 0 20 fn |i| do
+    for 0 20 (|i| do
         @dump "fac " i " = " (fac i)
-    end
+    end)
 
-    for 0 63 fn |i| do
+    for 0 63 (|i| do
         @dump "fib " i " = " (fib i)
-    end
+    end)
 
     -- (4) application-expression
-    fn |x| do x + 1 end 41
+    (|x| x + 1) 41 |> println
 
     -- (5) literal-expression
     let void = ()
@@ -106,7 +106,7 @@ let main ~ do
 
     let block = do
         let hello = "Hello from local Env!"
-        fn |_| do @dump hello end
+        |_| @dump hello
     end
     -- @dump hello
     block ()
@@ -123,11 +123,11 @@ let main ~ do
     c2 1
     c2 1
 
-    for 2 5000 fn |i| do
+    for 2 5000 (|i| do
         if isPrime i then
             @dump i
         end
-    end
+    end)
 
     fib >> fac <| 4 ? "fib(fac(4))"
 

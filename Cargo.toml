@@ -10,6 +10,7 @@ fnv = "1.0.3"
 lalrpop-util = "0.19.6"
 phf = { version = "0.10.0", features = ["macros"] }
 annotate-snippets = "0.9.1"
+polytype = "6.2.0"
 
 [build-dependencies]
 lalrpop = "0.19.6"

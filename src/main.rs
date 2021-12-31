@@ -18,12 +18,12 @@ use anyhow::{Context, Error, Result};
 use code::{Code, Cont, Env};
 use lalrpop_util::ParseError;
 use lexer::Lexer;
-use std::{cell::RefCell, env, fs, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, env, fs, rc::Rc};
 // use typechecker::Ctx;
 use ast::{Def, Instr, AST};
 
 /*
-    import core/io
+    import core/io (dump)
     export ()
 
     let main: Void ~ do
@@ -61,10 +61,14 @@ fn parse_error(source: &str, label: &str, slice_label: &str, range: (usize, usiz
 }
 
 fn read_program(filename: String) -> Result<AST> {
-    let source = fs::read_to_string(filename)
-        .expect("Woland: error reading source file. You are on your own.");
+    let source = fs::read_to_string(&filename).with_context(|| {
+        format!(
+            "error reading source file `{}`, you are on your own.",
+            filename
+        )
+    })?;
     let lexer = Lexer::new(&source);
-    let result = grammar::ASTParser::new().parse(&source, lexer);
+    let result = grammar::ASTParser::new().parse(&source, &mut HashMap::new(), lexer);
     match result {
         Ok(program) => Ok(program),
         Err(error) => match error {

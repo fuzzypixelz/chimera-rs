@@ -1,7 +1,16 @@
+use std::collections::HashMap;
+
+use polytype::{Type, TypeSchema, Variable};
+
 use crate::ast::*;
 use crate::lexer::{Tok, LexicalError};
 
-grammar<'input>(input: &'input str);
+// NOTE: The type_builder is a temporary HashMap that keeps
+// track of type variables and their corresponding variable number
+// in polytype. For example `forall a. a -> a` creates an entry
+// in the back of type_builder with { "a" : 0 }, this is clear()'d
+// once the non-terminal is fully parsed.
+grammar<'input>(input: &'input str, type_builder: &mut HashMap<String, usize>);
 
 pub AST: AST = {
     <m: Mod> <ds: Def+> => AST { module: m, defs: ds },
@@ -15,42 +24,85 @@ pub Def: Def = {
     <DName>  => Def::Name(<>),
 };
 
-// Annotated name; no parameters
-AName: (String, Ann) = {
-    <n: Name> Colon <a: Ann> => (n, a)
-};
-
 DName: DName = {
-    Let <n: Name> <ps: Name*> <op: AOP> <e: Expr> Newline => {
+    Let <n: Name> <ps: Name*> <a: NL<Ann>?> <op: NL<AOP>> <e: Expr> Newline => {
         if ps.is_empty() {
-            DName {name: n, ann: vec!["".to_string()], op, expr: e}
+            DName {name: n, ann: a, op, expr: e}
         } else {
-            // If the expression is already a block, avoid wrapping
-            // it in another one by extracting the Vec<Instr> inside.
-            let mut body = match e {
-                Expr::Block { body } => body,
-                other                => vec![Instr::Compute(other)]
-            };
-            let make_lambda = |p, b| Expr::Func { 
+            let mut rhs_expr = e;
+            // Making lambdas with lambdas, such expressivity!
+            let make_lambda = |p, e| Expr::Func { 
                     param: p,
-                    body: b,
-                    ann: vec!["Void".to_string()] 
+                    expr: Box::new(e),
             };
-            let (head, tail) = ps.split_first().unwrap();
-            for p in tail.into_iter().rev() {
-                body = vec![Instr::Compute(make_lambda(p.clone(), body))]
+            for param in ps.into_iter().rev() {
+                rhs_expr = make_lambda(param.clone(), rhs_expr)
             }
-            DName { name: n, 
-                    ann: vec!["".to_string()], 
-                    op, 
-                    expr: make_lambda(head.clone(), body) 
-            }
+            DName { name: n, ann: a, op, expr: rhs_expr }
         }
     }
 };
 
-Ann: Ann = {
-    SepList1<TypeName, Arrow>
+Ann: TypeSchema = {
+    Colon <TypeSchema> => {
+        // The type_build should always be empty before we
+        // start parsing a type annotation; it's empty when
+        // first created so this is fully guaranteed.
+        type_builder.clear();
+        <>
+    }
+};
+
+SimpleMonoType: Type = {
+    LParen <MonoType> RParen,
+    // NOTE: the convention is that type-variables are lower-case,
+    // but constructor names start with an upper-case.
+    <v: Name> => Type::Variable(
+        // FIXME: Figure out how to do proper error reporting
+        // in the parser! (probably by passing in a mut data-type).
+        *type_builder.get(&v).unwrap()
+    )
+}
+
+MonoType: Type = {
+    <SimpleMonoType>,
+    <n: TypeName> <ps: SimpleMonoType*> => Type::Constructed(
+        // TODO: is it better to lear the String or to switch N to String,
+        // alltogether? At least in the second case the names will be freed
+        // once the we're done with them i.e the typechecker!
+        // There is a small hurdle as polytype only implements `Name` for
+        // &'static str.
+        Box::leak(n.into_boxed_str()),
+        ps
+    ),
+}
+
+// NOTE: this part had to be seperated from the TypeSchema terminal,
+// since the .insert(..) wasn't getting executed before attempting
+// to parse the reset of the annotation, and so the variables weren't
+// present.
+TypeQuantifier : Variable = {
+    // FIXME: we shouldn't force the poor programmers to type `forall`
+    // everytime they need to do polymorphism, oh the horror!
+    Forall <v: Name> Dot => {
+        // The number of the `v` is picked as the maximum existing
+        // type variable PLUS one. Otherwise we put in zero.
+        let variable = match type_builder.values().max() {
+            None => 0,
+            Some(v) => v + 1,
+        };
+        type_builder.insert(v, variable);
+        variable
+    }
+}
+
+TypeSchema: TypeSchema = {
+    <SepList1<MonoType, Arrow>> => TypeSchema::Monotype(Type::from(<>)),
+    <v: TypeQuantifier> <t: TypeSchema> =>
+        TypeSchema::Polytype {
+            variable: v,
+            body: Box::new(t),
+        }
 };
 
 AOP: AssignOp = {
@@ -60,25 +112,28 @@ AOP: AssignOp = {
 
 Instr: Instr = {
     <DName>           => Instr::Let(<>),
-    <Expr> Newline    => Instr::Compute(<>),
+    <Expr>   Newline  => Instr::Compute(<>),
     Ellipsis Newline  => Instr::Ellipsis, 
     Break    Newline  => Instr::Break,
     <Bind>,
     <Assign>,
     NL<Loop> <b: Block> NL<End> => Instr::Loop { body: b },
-    NL<While> <c: Expr> NL<Do> <mut b: Block> NL<End> => {
-        // let not_c = Expr::Apply { 
-        //     left:  Box::new(Expr::Name("not".to_string())),
-        //     right: Box::new(c)
-        // };
-        b.insert(0, Instr::Compute(Expr::Branch {
-            paths: vec![
-                (c,                vec![Instr::Ellipsis]),
-                (Expr::Bool(true), vec![Instr::Break])
-            ]
-        }));
-        Instr::Loop { body: b }
-    },
+    // TODO: reintroduce `while` as a macro.
+    // It was removed because it causing ambiguity with do ... end
+    // blocks; the parser couldn't tell if the block is something
+    // to execute or apply to a left function.
+    // Being able to write `|x| x` and `|x| do x end` is more
+    // important than having builtin while loops for me, and they
+    // just compile to loop ... end blocks anyway!
+    // NL<While> <c: Expr> NL<Do> <mut b: Block> NL<End> => {
+    //     b.insert(0, Instr::Compute(Expr::Branch {
+    //         paths: vec![
+    //             (c,                vec![Instr::Ellipsis]),
+    //             (Expr::Bool(true), vec![Instr::Break])
+    //         ]
+    //     }));
+    //     Instr::Loop { body: b }
+    // },
 };
 
 Block: Vec<Instr> = {
@@ -92,8 +147,8 @@ Intrinsic: Expr = {
 };
 
 Bind: Instr = {
-    Var <n: Name> <op: AOP> <e: Expr> Newline
-    => Instr::Var {name: n, ann: vec!["".to_string()], op, expr: e}
+    Var <n: Name> <a: NL<Ann>?> <op: NL<AOP>> <e: Expr> Newline
+    => Instr::Var {name: n, ann: a, op, expr: e}
 };
 
 Assign: Instr = {
@@ -101,9 +156,10 @@ Assign: Instr = {
     => Instr::Assign {name: n, op, expr: e}
 };
 
-// 
 Branch: Expr = {
-    If <e: Expr> NL<Then> <b1: Block> <b2: (NL<Elif> <Expr> NL<Then> <Block>)*> <b3: (NL<Else> <Block>)?> End
+    If <e: Expr> NL<Then> <b1: Block> 
+    <b2: (NL<Elif> <Expr> NL<Then> <Block>)*> 
+    <b3: (NL<Else> <Block>)?> End
     => { 
         let b3 = match b3 {
             None    => vec![Instr::Compute(Expr::Void)],
@@ -126,7 +182,6 @@ Expr: Expr = {
         right: Box::new(r)
     },
     Intrinsic,
-    NL<Do> <Block> End => Expr::Block { body: <> },
 }
 
 NInfix: Expr = {
@@ -146,6 +201,7 @@ NApply: Expr = {
     <Array>,
     <Func>,
     <Branch>,
+    NL<Do> <Block> End => Expr::Block { body: <> },
     LParen <Expr> RParen,
 };
 
@@ -163,20 +219,16 @@ Array: Expr = {
 }
 
 Func: Expr = {
-    // TODO: bring back type annotations
-    // Fn Pipe <an: AName?> Pipe Arrow <mut a: Ann> 
-    Fn Pipe <n: Name?> NL<Pipe>
-    NL<Do> <b: Block> End => {
-        // let (n, t) = match an {
-        //     None => ("_".to_string(), "Void".to_string()),
-        //     Some((n, t)) => (n, t.first().unwrap().to_owned())
-        // };
-        // a.insert(0, t);
-        Expr::Func { 
-            param: n.unwrap_or("_".to_string()),
-            body: b, 
-            ann: vec!["Void".to_string()] 
+    Pipe <ps: Name+> NL<Pipe> <e: NApply> => {
+        let mut lambda = e;
+        let make_lambda = |p, e| Expr::Func { 
+                param: p,
+                expr: Box::new(e),
+        };
+        for param in ps.into_iter().rev() {
+            lambda = make_lambda(param.clone(), lambda)
         }
+        lambda
     }
 };
 
@@ -195,7 +247,7 @@ Boolean: bool = {
     False => false
 };
 
-TypeName: String = <"Type"> => <>.to_string();
+TypeName: String = <"TypeName"> => <>.to_string();
 Name:     String = {
     <"Name"> => <>.to_string(),
     LParen <OP> RParen
@@ -228,57 +280,62 @@ extern {
     type Error = LexicalError;
     
     enum Tok<'input> {
-        "Name"    => Tok::Name(<&'input str>),
-        "Type"    => Tok::TypeName(<&'input str>),
-        "OP"      => Tok::Operator(<&'input str>),
+        "Name"     => Tok::Name(<&'input str>),
+        "TypeName" => Tok::TypeName(<&'input str>),
+        "OP"       => Tok::Operator(<&'input str>),
 
-        "Int"     => Tok::IntLiteral(i64),
-        "Str"     => Tok::StrLiteral(<&'input str>),
-        "Char"    => Tok::CharLiteral(char),
+        "Int"      => Tok::IntLiteral(i64),
+        "Str"      => Tok::StrLiteral(<&'input str>),
+        "Char"     => Tok::CharLiteral(char),
 
-        Ellipsis  => Tok::Ellipsis,
+        Ellipsis   => Tok::Ellipsis,
 
-        At        => Tok::At,
-        Excl      => Tok::Excl,
-        Dot       => Tok::Dot,
+        At         => Tok::At,
+        // TODO: remove this (?)
+        Excl       => Tok::Excl, 
+        Dot        => Tok::Dot,
 
-        Let       => Tok::Let,
-        Do        => Tok::Do,
-        End       => Tok::End,
-        Var       => Tok::Var,
-        Type      => Tok::Type,
-        Macro     => Tok::Macro,
-        Import    => Tok::Import,
+        Let        => Tok::Let,
+        Do         => Tok::Do,
+        End        => Tok::End,
+        Var        => Tok::Var,
+        // TODO: replace type with data
+        Type       => Tok::Type, 
+        Macro      => Tok::Macro,
+        Import     => Tok::Import,
+        Forall     => Tok::Forall,
 
-        True      => Tok::True,
-        False     => Tok::False,
-        If        => Tok::If,
-        Then      => Tok::Then,
-        Elif      => Tok::Elif,
-        Else      => Tok::Else,
+        // TODO: r eplace true/false with algebraic data-types
+        True       => Tok::True,
+        False      => Tok::False,
+        If         => Tok::If,
+        Then       => Tok::Then,
+        Elif       => Tok::Elif,
+        Else       => Tok::Else,
 
-        Fn        => Tok::Fn,
+        Fn         => Tok::Fn, 
 
-        Loop      => Tok::Loop,
-        While     => Tok::While,
+        Loop       => Tok::Loop,
+        While      => Tok::While,
 
-        Break     => Tok::Break,
+        Break      => Tok::Break,
 
-        Colon     => Tok::Colon,
-        Arrow     => Tok::Arrow,
-        Pipe      => Tok::Pipe,
-        Comma     => Tok::Comma,
-        Equal     => Tok::Equal,
-        Tilde     => Tok::Tilde,
-        Hash      => Tok::Hash,
+        Colon      => Tok::Colon,
+        Arrow      => Tok::Arrow,
+        DArrow     => Tok::DArrow,
+        Pipe       => Tok::Pipe,
+        Comma      => Tok::Comma,
+        Equal      => Tok::Equal,
+        Tilde      => Tok::Tilde,
+        Hash       => Tok::Hash,
 
-        LParen    => Tok::LParen,
-        RParen    => Tok::RParen,
-        LBrack    => Tok::LBrack,
-        RBrack    => Tok::RBrack,
-        LSBrack   => Tok::LSBrack,
-        RSBrack   => Tok::RSBrack,
+        LParen     => Tok::LParen,
+        RParen     => Tok::RParen,
+        LBrack     => Tok::LBrack,
+        RBrack     => Tok::RBrack,
+        LSBrack    => Tok::LSBrack,
+        RSBrack    => Tok::RSBrack,
 
-        Newline   => Tok::Newline
+        Newline    => Tok::Newline
     }
 }

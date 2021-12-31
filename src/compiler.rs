@@ -43,7 +43,8 @@ impl Code for Expr {
             }
             Expr::Name(name) => CompiledCode::new(move |env, _cont| Env::get_name(env, &name)),
             Expr::Block { mut body } => {
-                // let (last, init) = body.split_last().unwrap();
+                // NOTE: the parser should've already ensured
+                // the body is not empty, so unwrap away!
                 let last = body.pop().unwrap();
                 let compiled_block = body.into_iter().map(Code::compile).collect::<Vec<_>>();
                 let compiled_expr = last.compile();
@@ -85,9 +86,8 @@ impl Code for Expr {
                     result
                 })
             }
-            Expr::Func { param, body, .. } => {
-                let compiled_body =
-                    Rc::new(body.into_iter().map(Code::compile).collect::<Vec<_>>());
+            Expr::Func { param, expr } => {
+                let compiled_body = Rc::new(expr.compile());
                 CompiledCode::new(move |env, _cont| {
                     Value::Func {
                         param: param.clone(),
@@ -132,13 +132,7 @@ impl Code for Expr {
                             .names
                             .insert(param.to_string(), input_value);
                         fenv.borrow_mut().outer = Some(closure.clone());
-                        // NOTE: the parser should've already ensured
-                        // the body is not empty, so unwrap away!
-                        let (last, init) = body.split_last().unwrap();
-                        for i in init.iter() {
-                            i.execute(fenv.clone(), cont.clone());
-                        }
-                        last.execute(fenv, cont)
+                        body.execute(fenv, cont)
                     } else {
                         // TODO: switch all unreachable!'s to the unreachable
                         // intrinsic for more optimzation (?)

@@ -4,14 +4,14 @@
 -- so an expression of the form e1 OP e2 OP e3 is
 -- equivalent to (e1 OP e2) OP e3. Partly (mostly)
 -- because this is the simplest way to parse them :^)
---: A -> (A -> B) -> B 
+--: a -> (a -> B) -> B 
 let (|>) x f = f x
 
---: (A -> B) -> A -> B 
+--: (a -> B) -> a -> B 
 let (<|) f x = f x
 
 -- Sequence two functions
---: (A -> B) -> (B -> C) -> A -> C
+--: (a -> B) -> (B -> C) -> a -> C
 let (>>) f g x = g (f x)
 
 -- (1) lambda-expression,this defintion expands to:
@@ -22,23 +22,23 @@ let (>>) f g x = g (f x)
 -- end
 -- The @-things and their args are special expressions
 -- whoose meaning is determined by the interpreter.
---: Int -> Int -> Int
-let (+) x y = @add x y
+let (+) x y : Int -> Int -> Int
+    = @add x y
 
---: Int -> Int -> Int
-let (-) x y = @sub x y
+let (-) x y : Int -> Int -> Int
+    = @sub x y
 
---: Int -> Int -> Int
-let (*) x y = @mul x y
+let (*) x y : Int -> Int -> Int
+    = @mul x y
 
---: Int -> Int -> Int
-let (/) x y = @div x y
+let (/) x y : Int -> Int -> Int
+    = @div x y
 
---: Int -> Int -> Int
-let (%) x y = @mod x y
+let (%) x y : Int -> Int -> Int
+    = @mod x y
 
---: A -> A -> Bool
-let (==) x y = @cmp x y
+let (==) x y : forall a . a -> a -> Bool
+    = @cmp x y
 
 -- (2) if-expression
 --: Bool -> Bool
@@ -50,72 +50,71 @@ let (||) x y = if x then true else y end
 --: Bool -> Bool -> Bool
 let (&&) x y = if x then y else false end
 
---: A -> A -> Bool
-let (!=) x y = not (@cmp x y)
+--: a -> a -> Bool
+let (!=) x y = not (x == y)
 
---: A -> Str -> A
-let (?) e n ~ do
+let (?) e n : forall a . a -> Str -> a ~ do
     @dump "[debug] " n " = " e
     e
 end
 
---: A -> A -> Void
-let (?=) x y ~ do
+--: a -> a -> Void
+let (?=) x y : forall a . a -> a -> Void ~ do
     if x != y then
         @dump "[assert] " x " != " y
     end
 end
 
---: Int -> Int -> (A -> B) -> Void
+--: Int -> Int -> (a -> B) -> Void
 let for s e f = do
     var i = s
-    -- this compiles down to the following:
-    -- loop
-    --   if condition then
-    --       ...
-    --   else
-    --       break
-    --   end
-    --   # do-block
-    -- end
-    while i != e do
+    loop
+        if i == e then
+            break
+        end
         f i
         i = i + 1
     end
 end
 
---: A -> [A] -> [A]
-let (::) x xs = @cons x xs
+let (::) x xs : forall a . List a -> List a -> List a 
+    = @cons x xs
 
---: (B -> A -> B) -> B -> [A] -> B
+let head xs : forall a . List a -> a 
+    = @head xs
+
+let tail xs : forall a . List a -> List a 
+    = @tail xs
+
+--: (B -> a -> B) -> B -> [a] -> B
 let foldl f acc xs = do
     if xs == [] then
         acc
     else
-        let h = @head xs
-        let t = @tail xs
+        let h = head xs
+        let t = tail xs
         foldl f (f acc h) t
     end
 end
 
---: (A -> B -> B) -> B -> [A] -> B
+--: (a -> B -> B) -> B -> [a] -> B
 let foldr f acc xs = do
     if xs == [] then
         acc
     else
-        let h = @head xs
-        let t = @tail xs
+        let h = head xs
+        let t = tail xs
         f h (foldr f acc t)
     end
 end
 
---: (A -> B) -> [A] -> [B]
+--: (a -> B) -> [a] -> [B]
 let map f xs = do
     let g x acc = f x :: acc
     foldr g [] xs
 end
 
---: (A -> Bool) -> [A] -> [A]
+--: (a -> Bool) -> [a] -> [a]
 let filter p xs = do
     let f x acc = if p x then
         x :: acc
@@ -125,63 +124,61 @@ let filter p xs = do
     foldr f [] xs
 end
 
---: (A -> B -> C) -> (B -> A -> C)
+--: (a -> B -> C) -> (B -> a -> C)
 let flip f x y = f y x
 
---: A -> B -> A
+--: a -> B -> a
 let const x y = x
 
---: [A] -> [A]
+--: [a] -> [a]
 let reverse xs = foldl (flip (::)) [] xs
 
---: [A] -> [A] -> [A]
+--: [a] -> [a] -> [a]
 let (^) xs ys = foldr (::) ys xs
 
---: [[A]] -> [A]
+--: [[a]] -> [a]
 let concat xs = foldr (^) [] xs
 
---: (A -> [B]) -> [A] -> [B]
+--: (a -> [B]) -> [a] -> [B]
 let concatMap f xs = map f xs |> concat
 
---: [A] -> Int
+--: [a] -> Int
 let len xs = foldr (const ((+) 1)) 0 xs
 
---: [A] -> Bool
+--: [a] -> Bool
 let any p xs = do
     let f x acc = p x || acc
     foldr f false xs
 end
 
---: [A] -> Bool
+--: [a] -> Bool
 let all p xs = do
     let f x acc = p x && acc
     foldr f true xs
 end
 
---: [A] -> Void
-let println x = @dump x
+let println x : forall a . a -> Void = @dump x
 
---: Int -> [A]
 let drop n xs = do
     if n == 0 then
         xs
     else
-        drop (n - 1) (@tail xs)
+        drop (n - 1) (tail xs)
     end
 end
 
---: Int -> [A]
+--: Int -> [a]
 let take n xs = do
     if n == 0 then
         []
     else
-        let h = @head xs
-        let t = @tail xs
+        let h = head xs
+        let t = tail xs
         h :: take (n - 1) t
     end
 end
 
---: (A -> Bool) -> [A] -> [A]
+--: (a -> Bool) -> [a] -> [a]
 let takeWhile p xs = do
     let f x acc = if p x then
         x :: acc
@@ -191,8 +188,7 @@ let takeWhile p xs = do
     foldr f [] xs
 end
 
---: Void -> Void
-let hcf _ = do
+let hcf _ : Void -> Void = do
     println "Halt and Catch Fire!"
     0 / 0
 end

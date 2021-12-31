@@ -26,7 +26,7 @@ syn match   woTypeName  '[A-Z][a-zA-Z0-9]*'
 syn keyword woKeywords  let var type macro 
 syn keyword woKeywords  import export
 syn keyword woKeywords  do end
-syn keyword woKeywords  fn data actor
+syn keyword woKeywords  fn data actor forall
 syn keyword woKeywords  if then elif else
 syn keyword woKeywords  loop while break
 

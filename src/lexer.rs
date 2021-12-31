@@ -32,6 +32,7 @@ pub enum Tok<'input> {
     Type,
     Macro,
     Import,
+    Forall,
 
     True,
     False,
@@ -49,6 +50,7 @@ pub enum Tok<'input> {
 
     Colon,
     Arrow,
+    DArrow,
     Pipe,
     Comma,
     Equal,
@@ -71,6 +73,7 @@ pub static RESERVED_NAMES: phf::Map<&'static str, Tok> = phf::phf_map! {
     "end"       => Tok::End,
     "var"       => Tok::Var,
     "type"      => Tok::Type,
+    "forall"    => Tok::Forall,
     "macro"     => Tok::Macro,
     "import"    => Tok::Import,
     "fn"        => Tok::Fn,
@@ -89,6 +92,7 @@ pub static RESERVED_SYMBOLS: phf::Map<&'static str, Tok> = phf::phf_map! {
     "..." => Tok::Ellipsis,
     ":"   => Tok::Colon,
     "->"  => Tok::Arrow,
+    "=>"  => Tok::DArrow,
     "|"   => Tok::Pipe,
     "="   => Tok::Equal,
     "~"   => Tok::Tilde,
@@ -226,6 +230,11 @@ impl<'input> Iterator for Lexer<'input> {
                         Some(self.operator(start))
                     }
                 }
+                // NOTE: candidates for multiline comments:
+                //  1. {- ... -} Haskell
+                //  2. (* ... *) AppleScript, *ML, Pascal
+                //  3. --[[ ... ]]-- Lua
+                //  4. -{ ... }- Passerine
                 '(' => {
                     self.chars.next();
                     Some(Ok((start, Tok::LParen, start + 1)))

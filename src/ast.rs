@@ -1,5 +1,7 @@
 use std::fmt::Debug;
 
+use polytype::TypeSchema;
+
 #[derive(Debug, PartialEq, Clone)]
 pub struct AST {
     pub module: Mod,
@@ -15,7 +17,7 @@ pub enum Def {
 pub struct DName {
     // A name is a reference to an expression,
     pub name: String,
-    pub ann: Ann,
+    pub ann: Option<TypeSchema>,
     pub op: AssignOp,
     pub expr: Expr,
 }
@@ -29,10 +31,6 @@ pub struct Mod {
     // exports { names: Vec<String> },
 }
 
-// pub type Name   = String;
-pub type Ann = Vec<String>;
-// pub type Params = Vec<String>;
-
 #[derive(Debug, PartialEq, Clone)]
 pub enum Instr {
     // This is meant to force evaluation of a certain Expr,
@@ -44,7 +42,7 @@ pub enum Instr {
     // NOTE: Obviously this is only allowed in impure functions.
     Var {
         name: String,
-        ann: Ann,
+        ann: Option<TypeSchema>,
         op: AssignOp,
         expr: Expr,
     }, // var i
@@ -80,25 +78,11 @@ pub enum Expr {
     Name(String),     // coolName
     List(Vec<Expr>),  // [1, 2, 3]
     Array(Vec<Expr>), // #[1, 2, 3]
-    Block {
-        body: Vec<Instr>,
-    },
-    Func {
-        param: String,
-        body: Vec<Instr>,
-        ann: Ann,
-    }, // do |x| x + 1 end
-    Apply {
-        left: Box<Expr>,
-        right: Box<Expr>,
-    }, // f x
-    Branch {
-        paths: Vec<(Expr, Vec<Instr>)>,
-    }, // if cond then 0 else 42
-    Intrinsic {
-        name: String,
-        args: Vec<Expr>,
-    },
+    Block { body: Vec<Instr> },
+    Func { param: String, expr: Box<Expr> },     // |x| x + 1
+    Apply { left: Box<Expr>, right: Box<Expr> }, // f x
+    Branch { paths: Vec<(Expr, Vec<Instr>)> },   // if cond then 0 else 42 end
+    Intrinsic { name: String, args: Vec<Expr> },
 }
 
 #[derive(Debug, PartialEq, Clone)]

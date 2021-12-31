@@ -17,7 +17,7 @@ pub enum Value {
     Array(Vec<WoValue>),
     Func {
         param: String,
-        body: Rc<Vec<CompiledCode>>,
+        body: Rc<CompiledCode>,
         closure: WoEnv,
     },
 }

@@ -127,7 +127,7 @@ impl Code for Expr {
                         // of the Function expression. This might by the Env of another
                         // function application or a block expression.
                         let fenv = Rc::new(RefCell::new(Env::default()));
-                        let input_value = compiled_input.execute(env.clone(), cont.clone());
+                        let input_value = compiled_input.execute(env, cont.clone());
                         fenv.borrow_mut()
                             .names
                             .insert(param.to_string(), input_value);
@@ -307,8 +307,7 @@ impl Code for Expr {
                         }
                     }),
                     "len" => CompiledCode::new(move |env, cont| {
-                        if let Value::Array(array) =
-                            &*compiled_args[0].execute(env.clone(), cont.clone()).borrow()
+                        if let Value::Array(array) = &*compiled_args[0].execute(env, cont).borrow()
                         {
                             Value::Int(array.len() as i64).into()
                         } else {

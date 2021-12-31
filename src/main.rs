@@ -42,7 +42,7 @@ fn parse_error(source: &str, label: &str, slice_label: &str, range: (usize, usiz
         }),
         footer: vec![],
         slices: vec![Slice {
-            source: &source,
+            source,
             line_start: 0,
             origin: None,
             fold: true,

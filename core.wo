@@ -155,16 +155,10 @@ let concatMap f xs = map f xs |> concat
 let len xs = foldr (const ((+) 1)) 0 xs
 
 --: [a] -> Bool
-let any p xs = do
-    let f x acc = p x || acc
-    foldr f false xs
-end
+let any p xs = foldr (|x acc| p x || acc) false xs
 
 --: [a] -> Bool
-let all p xs = do
-    let f x acc = p x && acc
-    foldr f true xs
-end
+let all p xs = foldr (|x acc| p x && acc) true xs
 
 let drop n xs = do
     if n == 0 then

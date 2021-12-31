@@ -172,9 +172,14 @@ Branch: Expr = {
     }
 };
 
-Expr: Expr = {
+Expr : Expr = {
+    Infix,
+    Func,
+};
+
+Infix: Expr = {
     NInfix,
-    <l: Expr> <op: OP> <r: NInfix> => Expr::Apply {
+    <l: Infix> <op: OP> <r: NInfix> => Expr::Apply {
         left: Box::new(Expr::Apply { 
             left:  Box::new(Expr::Name(op)),
             right: Box::new(l)
@@ -197,10 +202,9 @@ NApply: Expr = {
     <Name>         => Expr::Name(<>),
     <Str>          => Expr::Str(<>),
     <Char>         => Expr::Char(<>),
-    <List>,
-    <Array>,
-    <Func>,
-    <Branch>,
+    List,
+    Array,
+    Branch,
     NL<Do> <Block> End => Expr::Block { body: <> },
     LParen <Expr> RParen,
 };
@@ -219,7 +223,7 @@ Array: Expr = {
 }
 
 Func: Expr = {
-    Pipe <ps: Name+> NL<Pipe> <e: NApply> => {
+    Pipe <ps: Name+> NL<Pipe> <e: Infix> => {
         let mut lambda = e;
         let make_lambda = |p, e| Expr::Func { 
                 param: p,

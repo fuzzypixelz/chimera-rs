@@ -65,15 +65,14 @@ impl From<Vec<WoValue>> for List {
     }
 }
 
-// impl From<List> for Vec<WoValue> {
-impl Into<Vec<WoValue>> for List {
-    fn into(mut self) -> Vec<WoValue> {
+impl From<List> for Vec<WoValue> {
+    fn from(mut item: List) -> Vec<WoValue> {
         let mut result = Vec::new();
         loop {
-            match self {
+            match item {
                 List::Cons(v, l) => {
                     result.push(v);
-                    self = *l;
+                    item = *l;
                 }
                 List::Nil => break result,
             }

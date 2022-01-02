@@ -1,20 +1,8 @@
 use crate::ast::{DName, Def, Expr};
+use crate::error::TypeError;
 use anyhow::Result;
-use polytype::{tp, Context, Infer, Type, TypeSchema, UnificationError};
+use polytype::{tp, Context, Infer, Type, TypeSchema};
 use std::{cell::RefCell, collections::HashMap};
-use thiserror::Error;
-
-#[derive(Error, Debug)]
-pub enum TypeError {
-    // TODO: do fancy error reporting, this would require:
-    //  1. translating this error to a human-readable version
-    //  2. recording information about where in the source code
-    //     the expression shows and use annotate-snippets.
-    #[error("unification error")]
-    UnificationError(#[from] UnificationError),
-    #[error("the name `{0}` is not in scope")]
-    ScopeError(String),
-}
 
 #[derive(Default)]
 pub struct Lexicon {

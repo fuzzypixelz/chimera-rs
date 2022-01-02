@@ -1,10 +1,9 @@
-use std::cell::RefCell;
-use std::io::{self, Read};
-use std::rc::Rc;
-
 use crate::ast::{DName, Expr, Instr};
 use crate::code::{Code, CompiledCode, Env};
 use crate::value::{List, Value};
+use std::cell::RefCell;
+use std::io::{self, Read};
+use std::rc::Rc;
 
 impl Code for Expr {
     fn compile(self) -> CompiledCode {
@@ -142,6 +141,9 @@ impl Code for Expr {
             }
             Expr::Intrinsic { name, args } => {
                 let compiled_args = args.into_iter().map(Code::compile).collect::<Vec<_>>();
+                // FIXME: The list of intrinsics and the scope of their bhaviour
+                // is getting unmanageable. Should we keep them, there has to be
+                // a way of refactoring them into a seperate module.
                 match name.as_str() {
                     "dump" => CompiledCode::new(move |env, cont| {
                         for a in compiled_args.iter() {
@@ -386,6 +388,9 @@ impl Code for Instr {
             }
             Instr::Break => CompiledCode::new(move |_env, cont| {
                 if cont.borrow().loops == 0 {
+                    // FIXME: this should be statically determined and removed
+                    // from here. It would both get rid of another check and
+                    // avoid silly errors.
                     panic!("Woland: can only break out of a loop.")
                 }
                 cont.borrow_mut().loops -= 1;

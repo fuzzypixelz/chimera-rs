@@ -1,8 +1,7 @@
+use crate::code::{CompiledCode, WoEnv};
 use std::cell::RefCell;
 use std::fmt::Display;
 use std::rc::Rc;
-
-use crate::code::{CompiledCode, WoEnv};
 
 pub type WoValue = Rc<RefCell<Value>>;
 

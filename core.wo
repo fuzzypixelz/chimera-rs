@@ -37,7 +37,7 @@ let (/) x y : Int -> Int -> Int
 let (%) x y : Int -> Int -> Int
     = @mod x y
 
-let (==) x y : forall a . a -> a -> Bool
+let (==) x y : forall a. a -> a -> Bool
     = @cmp x y
 
 -- (2) if-expression
@@ -53,20 +53,20 @@ let (&&) x y = if x then y else false end
 --: a -> a -> Bool
 let (!=) x y = not (x == y)
 
-let println x : forall a . a -> Void
+let println x : forall a. a -> Void
     = @dump x
 
-let hcf _ : Void -> Void = do
+let hcf _ : Void -> Void ~ do
     println "Halt and Catch Fire!"
     0 / 0
 end
 
-let (?) e n : forall a . a -> Str -> a ~ do
+let (?) e n : forall a. a -> Str -> a ~ do
     @dump "[debug] " n " = " e
     e
 end
 
-let (?=) x y : forall a . a -> a -> Void ~ do
+let (?=) x y : forall a. a -> a -> Void = do
     if x != y then
         @dump "[assert] failed equality check:"
         @dump "[assert] left  = " x
@@ -87,13 +87,13 @@ let for s e f = do
     end
 end
 
-let (::) x xs : forall a . List a -> List a -> List a 
+let (::) x xs : forall a. List a -> List a -> List a 
     = @cons x xs
 
-let head xs : forall a . List a -> a 
+let head xs : forall a. List a -> a 
     = @head xs
 
-let tail xs : forall a . List a -> List a 
+let tail xs : forall a. List a -> List a 
     = @tail xs
 
 --: (b -> a -> b) -> b -> [a] -> b

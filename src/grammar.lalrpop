@@ -3,7 +3,8 @@ use std::collections::HashMap;
 use polytype::{Type, TypeSchema, Variable};
 
 use crate::ast::*;
-use crate::lexer::{Tok, LexicalError};
+use crate::lexer::Tok;
+use crate::error::LexicalError;
 
 // NOTE: The type_builder is a temporary HashMap that keeps
 // track of type variables and their corresponding variable number
@@ -30,13 +31,11 @@ DName: DName = {
             DName {name: n, ann: a, op, expr: e}
         } else {
             let mut rhs_expr = e;
-            // Making lambdas with lambdas, such expressivity!
-            let make_lambda = |p, e| Expr::Func { 
-                    param: p,
-                    expr: Box::new(e),
-            };
             for param in ps.into_iter().rev() {
-                rhs_expr = make_lambda(param.clone(), rhs_expr)
+                rhs_expr = Expr::Func { 
+                    param,
+                    expr: Box::new(rhs_expr),
+                };
             }
             DName { name: n, ann: a, op, expr: rhs_expr }
         }
@@ -162,6 +161,9 @@ Branch: Expr = {
     <b3: (NL<Else> <Block>)?> End
     => { 
         let b3 = match b3 {
+            // If the user doesn't provide an else clause
+            // we insert one with a `()` expression which
+            // forces the entire expression to have type Void.
             None    => vec![Instr::Compute(Expr::Void)],
             Some(v) => v
         };
@@ -228,12 +230,11 @@ Array: Expr = {
 Func: Expr = {
     Pipe <ps: Name+> NL<Pipe> <e: Expr> => {
         let mut lambda = e;
-        let make_lambda = |p, e| Expr::Func { 
-                param: p,
-                expr: Box::new(e),
-        };
         for param in ps.into_iter().rev() {
-            lambda = make_lambda(param.clone(), lambda)
+            lambda = Expr::Func { 
+                param,
+                expr: Box::new(lambda),
+            };
         }
         lambda
     }
@@ -241,12 +242,12 @@ Func: Expr = {
 
 I64: i64 = <"Int"> => match <> {
     Tok::IntLiteral(i)  => i,
-    _ => panic!("unreacheable")
+    _ => unreachable!()
 };
 
 Char: char = <"Char"> => match <> {
     Tok::CharLiteral(c)  => c,
-    _ => panic!("unreacheable")
+    _ => unreachable!()
 };
 
 Boolean: bool = {

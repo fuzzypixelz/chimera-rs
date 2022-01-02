@@ -1,9 +1,8 @@
+use crate::error::LexicalError;
 use std::fmt::Display;
 use std::iter::Peekable;
 use std::str::CharIndices;
 use std::str::FromStr;
-
-use thiserror::Error;
 
 pub type Spanned<'input> = Result<(usize, Tok<'input>, usize), LexicalError>;
 
@@ -102,12 +101,6 @@ pub static RESERVED_SYMBOLS: phf::Map<&'static str, Tok> = phf::phf_map! {
     "."   => Tok::Dot,
     "#"   => Tok::Hash,
 };
-
-#[derive(Error, Copy, Clone, Debug)]
-pub enum LexicalError {
-    #[error("Invalid syntax")]
-    InvalidSyntax,
-}
 
 pub struct Lexer<'input> {
     chars: Peekable<CharIndices<'input>>,

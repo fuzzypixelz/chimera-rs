@@ -79,6 +79,7 @@ end
 let for s e f = do
     var i = s
     loop
+        i ? "i"
         if i == e then
             break
         end
@@ -139,6 +140,9 @@ let flip f x y = f y x
 
 --: a -> b -> a
 let const x y = x
+
+--: a -> a
+let id x = x
 
 --: [a] -> [a]
 let reverse xs = foldl (flip (::)) [] xs

@@ -24,11 +24,12 @@ pub enum Tok<'input> {
     Dot,
     Dollar,
 
+    Mod,
     Let,
     Do,
     End,
     Var,
-    Type,
+    Data,
     Macro,
     Import,
     Forall,
@@ -58,20 +59,21 @@ pub enum Tok<'input> {
 
     LParen,
     RParen,
+    LBrace,
+    RBrace,
     LBrack,
     RBrack,
-    LSBrack,
-    RSBrack,
 
     Newline,
 }
 
 pub static RESERVED_NAMES: phf::Map<&'static str, Tok> = phf::phf_map! {
+    "mod"       => Tok::Mod,
     "let"       => Tok::Let,
     "do"        => Tok::Do,
     "end"       => Tok::End,
     "var"       => Tok::Var,
-    "type"      => Tok::Type,
+    "data"      => Tok::Data,
     "forall"    => Tok::Forall,
     "macro"     => Tok::Macro,
     "import"    => Tok::Import,
@@ -238,19 +240,19 @@ impl<'input> Iterator for Lexer<'input> {
                 }
                 '{' => {
                     self.chars.next();
-                    Some(Ok((start, Tok::LBrack, start + 1)))
+                    Some(Ok((start, Tok::LBrace, start + 1)))
                 }
                 '}' => {
                     self.chars.next();
-                    Some(Ok((start, Tok::RBrack, start + 1)))
+                    Some(Ok((start, Tok::RBrace, start + 1)))
                 }
                 '[' => {
                     self.chars.next();
-                    Some(Ok((start, Tok::LSBrack, start + 1)))
+                    Some(Ok((start, Tok::LBrack, start + 1)))
                 }
                 ']' => {
                     self.chars.next();
-                    Some(Ok((start, Tok::RSBrack, start + 1)))
+                    Some(Ok((start, Tok::RBrack, start + 1)))
                 }
                 ',' => {
                     self.chars.next();

@@ -13,33 +13,51 @@ use crate::error::LexicalError;
 // once the non-terminal is fully parsed.
 grammar<'input>(input: &'input str, type_builder: &mut HashMap<String, usize>);
 
-pub AST: AST = {
-    <m: Mod> <ds: Def+> => AST { module: m, defs: ds },
+pub Item: Item = {
+    Definition,
+    Attribute,
+    DataType,
+    Module,
 };
 
-Mod: Mod = {
-    <is: (Import <Name> Newline)*> => Mod { imports: is }
-}
-
-pub Def: Def = {
-    <DName>  => Def::Name(<>),
-};
-
-DName: DName = {
-    Let <n: Name> <ps: Name*> <a: NL<Ann>?> <op: NL<AOP>> <e: Expr> Newline => {
+Definition: Item = {
+    Let <name: Name> <ps: Name*> <ann: NL<Ann>?> NL<Equal> <e: Expr> Newline => {
         if ps.is_empty() {
             DName {name: n, ann: a, op, expr: e}
         } else {
-            let mut rhs_expr = e;
+            let mut expr = e;
             for param in ps.into_iter().rev() {
                 rhs_expr = Expr::Func { 
                     param,
                     expr: Box::new(rhs_expr),
                 };
             }
-            DName { name: n, ann: a, op, expr: rhs_expr }
+            Item::Definition { name, ann, expr }
         }
     }
+};
+
+Attribute: Item = {
+    At LBrack <name: Name> LParen <args: SepList<Expr, Comma>> RParen RBrack Newline
+        => Item::Attribute { name, args }
+};
+
+DataType: Item = {
+    Data <kind: TypeSchema> Newline
+        <variants: SepList<Variant, Comma>>
+    End => Item::DataType { kind, variants }
+};
+
+Variant: (String, Vec<(String, TypeSchema)>) = {
+    <TypeName> NL<LBrace> 
+        <SepList<Name, Comma>>
+    RBrace
+};
+
+Module: Item = {
+    Mod <name: Name> Newline
+        <items: Item*> 
+    End => Item::Module { name, items }
 };
 
 Ann: TypeSchema = {
@@ -64,7 +82,7 @@ SimpleMonoType: Type = {
 }
 
 MonoType: Type = {
-    <SimpleMonoType>,
+    SimpleMonoType,
     <n: TypeName> <ps: SimpleMonoType*> => Type::Constructed(
         // TODO: is it better to lear the String or to switch N to String,
         // alltogether? At least in the second case the names will be freed
@@ -80,7 +98,7 @@ MonoType: Type = {
 // since the .insert(..) wasn't getting executed before attempting
 // to parse the reset of the annotation, and so the variables weren't
 // present.
-TypeQuantifier : Variable = {
+TypeQuantifier: Variable = {
     // FIXME: we shouldn't force the poor programmers to type `forall`
     // everytime they need to do polymorphism, oh the horror!
     Forall <v: Name> Dot => {
@@ -96,7 +114,7 @@ TypeQuantifier : Variable = {
 }
 
 TypeSchema: TypeSchema = {
-    <SepList1<MonoType, Arrow>> => TypeSchema::Monotype(Type::from(<>)),
+    SepList1<MonoType, Arrow> => TypeSchema::Monotype(Type::from(<>)),
     <v: TypeQuantifier> <t: TypeSchema> =>
         TypeSchema::Polytype {
             variable: v,
@@ -104,74 +122,9 @@ TypeSchema: TypeSchema = {
         }
 };
 
-AOP: AssignOp = {
-    Equal => AssignOp::Equal,
-    Tilde => AssignOp::Tilde
-};
-
-Instr: Instr = {
-    <DName>           => Instr::Let(<>),
-    <Expr>   Newline  => Instr::Compute(<>),
-    Ellipsis Newline  => Instr::Ellipsis, 
-    Break    Newline  => Instr::Break,
-    <Bind>,
-    <Assign>,
-    NL<Loop> <b: Block> NL<End> => Instr::Loop { body: b },
-    // TODO: reintroduce `while` as a macro.
-    // It was removed because it causing ambiguity with do ... end
-    // blocks; the parser couldn't tell if the block is something
-    // to execute or apply to a left function.
-    // Being able to write `|x| x` and `|x| do x end` is more
-    // important than having builtin while loops for me, and they
-    // just compile to loop ... end blocks anyway!
-    // NL<While> <c: Expr> NL<Do> <mut b: Block> NL<End> => {
-    //     b.insert(0, Instr::Compute(Expr::Branch {
-    //         paths: vec![
-    //             (c,                vec![Instr::Ellipsis]),
-    //             (Expr::Bool(true), vec![Instr::Break])
-    //         ]
-    //     }));
-    //     Instr::Loop { body: b }
-    // },
-};
-
-Block: Vec<Instr> = {
-    <Expr> => vec![Instr::Compute(<>)],
-    <Instr+>
-};
-
-Intrinsic: Expr = {
-    At <n: Name> <es: NApply*>
-    => Expr::Intrinsic { name: n, args: es }
-};
-
-Bind: Instr = {
-    Var <n: Name> <a: NL<Ann>?> <op: NL<AOP>> <e: Expr> Newline
-    => Instr::Var {name: n, ann: a, op, expr: e}
-};
-
-Assign: Instr = {
-    <n: Name> <op: AOP> <e: Expr> Newline
-    => Instr::Assign {name: n, op, expr: e}
-};
-
-Branch: Expr = {
-    If <e: Expr> NL<Then> <b1: Block> 
-    <b2: (NL<Elif> <Expr> NL<Then> <Block>)*> 
-    <b3: (NL<Else> <Block>)?> End
-    => { 
-        let b3 = match b3 {
-            // If the user doesn't provide an else clause
-            // we insert one with a `()` expression which
-            // forces the entire expression to have type Void.
-            None    => vec![Instr::Compute(Expr::Void)],
-            Some(v) => v
-        };
-        let mut paths = vec![(e, b1)];
-        paths.extend(b2.into_iter());
-        paths.push((Expr::Bool(true), b3));
-        Expr::Branch { paths }
-    }
+Stmt: Stmt = {
+    Item           => Stmt::Item(<>),
+    <Expr> Newline => Stmt::Expr(<>),
 };
 
 Expr : Expr = {
@@ -180,6 +133,7 @@ Expr : Expr = {
     // functions by having two seperate terminals, one for "single-line"
     // lambdas and another do "multi-line" lambdas.
     Func,
+    Assign,
 };
 
 Infix: Expr = {
@@ -191,25 +145,23 @@ Infix: Expr = {
         }),
         right: Box::new(r)
     },
-    Intrinsic,
-}
-
-NInfix: Expr = {
-    NApply,
-    Apply,
 };
 
-// Not a function application
+NInfix: Expr = {
+    Apply,
+    NApply,
+};
+
 NApply: Expr = {
+    Ellipsis       => Expr::Ellipsis,
     LParen RParen  => Expr::Void,
-    <Boolean>      => Expr::Bool(<>),
-    <I64>          => Expr::Int(<>),
-    <Name>         => Expr::Name(<>),
-    <Str>          => Expr::Str(<>),
-    <Char>         => Expr::Char(<>),
-    List,
-    Array,
+    I64            => Expr::Int(<>),
+    Boolean        => Expr::Bool(<>),
+    Char           => Expr::Char(<>),
+    Str            => Expr::Str(<>),
+    Name           => Expr::Name(<>),
     Branch,
+    Field,
     NL<Do> <Block> End => Expr::Block { body: <> },
     LParen <Expr> RParen,
 };
@@ -218,14 +170,6 @@ Apply: Expr = {
     <l: Apply>  <r: NApply>  => Expr::Apply { left: Box::new(l), right: Box::new(r) },
     <l: NApply> <r: NApply> => Expr::Apply { left: Box::new(l), right: Box::new(r) },
 };
-
-List: Expr = {
-    NL<LSBrack> <v: SepList<Expr, NL<Comma>>> RSBrack => Expr::List(v)
-}
-
-Array: Expr = {
-    Hash NL<LSBrack> <v: SepList<Expr, NL<Comma>>> RSBrack => Expr::Array(v)
-}
 
 Func: Expr = {
     Pipe <ps: Name+> NL<Pipe> <e: Expr> => {
@@ -238,6 +182,46 @@ Func: Expr = {
         }
         lambda
     }
+};
+
+Field: Expr = {
+    <expr: NApply> Dot <name: Name> => Expr::Field { expr, name }
+};
+
+Assign: Expr = {
+    <left: Field> Equal <right: Expr> => Expr::Assign { left, right }
+};
+
+Block: Vec<Stmt> = {
+    Expr    => vec![Stmt:Expr(<>)],
+    <Stmt+>
+};
+
+Branch: Expr = {
+    If <e: Expr> NL<Then> <b1: Block> 
+    <b2: (NL<Elif> <Expr> NL<Then> <Block>)*> 
+    <b3: (NL<Else> <Block>)?> End
+    => { 
+        let b3 = match b3 {
+            // If the user doesn't provide an else clause
+            // we insert one with a `()` expression which
+            // forces the entire expression to have type Void.
+            None    => vec![Stmt::Compute(Expr::Void)],
+            Some(v) => v
+        };
+        let mut paths = vec![(e, b1)];
+        paths.extend(b2.into_iter());
+        paths.push((Expr::Bool(true), b3));
+        Expr::Branch { paths }
+    }
+};
+
+List: Expr = {
+    NL<LBrack> <v: SepList<Expr, NL<Comma>>> RBrack => Expr::List(v)
+};
+
+Array: Expr = {
+    Hash NL<LBrack> <v: SepList<Expr, NL<Comma>>> RBrack => Expr::Array(v)
 };
 
 I64: i64 = <"Int"> => match <> {
@@ -303,12 +287,13 @@ extern {
         Excl       => Tok::Excl, 
         Dot        => Tok::Dot,
 
+        Mod        => Tok::Mod,
         Let        => Tok::Let,
         Do         => Tok::Do,
         End        => Tok::End,
         Var        => Tok::Var,
         // TODO: replace type with data
-        Type       => Tok::Type, 
+        Data       => Tok::Data, 
         Macro      => Tok::Macro,
         Import     => Tok::Import,
         Forall     => Tok::Forall,
@@ -339,10 +324,10 @@ extern {
 
         LParen     => Tok::LParen,
         RParen     => Tok::RParen,
+        LBrace     => Tok::LBrace,
+        RBrace     => Tok::RBrace,
         LBrack     => Tok::LBrack,
         RBrack     => Tok::RBrack,
-        LSBrack    => Tok::LSBrack,
-        RSBrack    => Tok::RSBrack,
 
         Newline    => Tok::Newline
     }

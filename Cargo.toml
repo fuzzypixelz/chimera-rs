@@ -1,5 +1,5 @@
 [package]
-name = "woland"
+name = "chimera"
 version = "0.1.0"
 edition = "2021"
 
@@ -10,7 +10,7 @@ fnv = "1.0.3"
 lalrpop-util = "0.19.6"
 phf = { version = "0.10.0", features = ["macros"] }
 annotate-snippets = "0.9.1"
-polytype = "6.2.0"
+polytype = { version = "6.2.1", default-features = false }
 
 [build-dependencies]
 lalrpop = "0.19.6"

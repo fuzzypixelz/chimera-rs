@@ -1,11 +1,11 @@
-use crate::ast::{DName, Def, Expr};
+use crate::ast::{Expr, Item, Stmt};
 use crate::error::TypeError;
 use anyhow::Result;
 use polytype::{tp, Context, Infer, Type, TypeSchema};
 use std::{cell::RefCell, collections::HashMap};
 
-#[derive(Default)]
-pub struct Lexicon {
+#[derive(Default, Clone)]
+pub struct Lexicon<'a> {
     // NOTE: `Context` is a bit of a misnomer: it doesn't track information
     // about the types of (variable) names, but rather the substitutions done
     // when you call `.unify()` and friends.
@@ -16,10 +16,11 @@ pub struct Lexicon {
     // to the user on demand. As it stands now, we are only making
     // use of the type-checking ability of algorith J.
     // types: RefCell<HashMap<String, Type>>,
+    outer: Option<&'a Lexicon<'a>>,
 }
 
 // See: https://en.wikipedia.org/wiki/Hindley-Milner_type_system#Algorithm_J
-impl Infer<Lexicon, TypeError> for Expr {
+impl<'a> Infer<Lexicon<'a>, TypeError> for Expr {
     // The Type inference algorithm is called J, for some reason.
     // NOTE: According to Milner:
     //   "As it stands, W is hardly an efficient algorithm;
@@ -30,7 +31,7 @@ impl Infer<Lexicon, TypeError> for Expr {
     // `let name0 = expr0 in let name1 = expr1 in ... let nameN = exprN in ()`.
     // This means that Woland's Let-syntax is different from the polymorphic
     // lambda calculus' Let-polymorphism, but is still equivalent to it.
-    fn infer(&self, lexicon: &Lexicon) -> Result<Type, TypeError> {
+    fn infer(&self, lexicon: &Lexicon<'a>) -> Result<Type, TypeError> {
         match self {
             // Boring hard-coded primitive types, nothing to see here!
             Expr::Void => Ok(tp!(Void)),
@@ -43,12 +44,7 @@ impl Infer<Lexicon, TypeError> for Expr {
             // a polytype `ts`, otherwise the algorithm fails.
             // We then specialize `ts` to a monotype `t` by replacing the bounded type
             // variables by fresh new ones; `t` is then the type of `name`.
-            Expr::Name(name) => Ok(lexicon
-                .assumptions
-                .borrow()
-                .get(name)
-                .ok_or_else(|| TypeError::ScopeError(name.to_string()))?
-                .instantiate(&mut lexicon.ctx.borrow_mut())),
+            Expr::Name(name) => lexicon.get(name),
             // This corresponds to the [APP] rule:
             // Only this rule forces refinement of the type variables introduced.
             // We recursively call J to infer the type of `left` and `right`,
@@ -71,7 +67,7 @@ impl Infer<Lexicon, TypeError> for Expr {
             // function parameter, which is added as an assumption in the lexicon.
             // Then we use the new information to infer the type of `expr`, say `te`.
             // If successful, we know that the lambda is of type `tp -> te`.
-            Expr::Func { param, expr } => {
+            Expr::Lambda { param, expr } => {
                 let tp = lexicon.ctx.borrow_mut().new_variable();
                 lexicon
                     .assumptions
@@ -85,48 +81,148 @@ impl Infer<Lexicon, TypeError> for Expr {
                 lexicon.assumptions.borrow_mut().remove_entry(param);
                 Ok(Type::arrow(tp, te))
             }
+            // If the last block is a statement-expression, then that determines
+            // the type of the block, otherwise a Void type is assumed.
+            // Currently all Item's are ignored.
+            Expr::Block { body } => {
+                let mut local_lexicon = Lexicon::default();
+                // FIXME: this clones the entire "list" of lexicons
+                // each time it entered a new block, not good.
+                local_lexicon.outer = Some(lexicon);
+                let (last, init) = body.split_last().unwrap();
+                for stmt in init {
+                    match stmt {
+                        Stmt::Expr(expr) => {
+                            expr.infer(&local_lexicon)?;
+                        }
+                        Stmt::Item(item) => {
+                            // TODO: make a Check Trait for items.
+                            local_lexicon.check(item)?;
+                        }
+                    }
+                }
+                if let Stmt::Expr(expr) = last {
+                    expr.infer(&local_lexicon)
+                } else {
+                    Ok(tp!(Void))
+                }
+            }
             _ => unimplemented!("the expression {:?} is not type-checked!", self),
         }
     }
 }
 
-impl Lexicon {
-    pub fn check(self, defs: &[Def]) -> Result<(), TypeError> {
-        for def in defs {
-            let Def::Name(DName {
-                name, ann, expr, ..
-            }) = def;
-            if let Some(ts) = ann {
-                // We introduce type annotations into the algorithm
-                // without any checks, as if it it infered them itself.
-                // It is up to the user to make sure their annotations
-                // are correct, that is if they choose to add them.
-                // Annotations are almost always unecessary. Keep It Simple.
-                self.assumptions
-                    .borrow_mut()
-                    .insert(name.clone(), ts.clone());
-            } else {
-                // This corresponds to the [LET] rule:
-                // We first find the most general type `te` for `expr`,
-                // Then we "clone" the type `te` by universally quantifying
-                // all the free type variables within it that are NOT also
-                // free in the assumptions, the resulting polytype `ts` is
-                // then added to the assumptions as the type of `name`.
-                let te = expr.infer(&self)?;
-                let free_variables = self
-                    .assumptions
-                    .borrow()
-                    .values()
-                    .flat_map(|ts| ts.free_vars())
-                    .collect::<Vec<_>>();
-                // Variables specified by `bound` remain unquantified.
-                let ts = te.generalize(&free_variables);
-                self.assumptions.borrow_mut().insert(name.clone(), ts);
+impl<'a> Lexicon<'a> {
+    pub fn get(&self, name: &str) -> Result<Type, TypeError> {
+        match self.assumptions.borrow().get(name) {
+            None => match self.outer {
+                None => Err(TypeError::ScopeError(name.to_string())),
+                Some(l) => l.get(name),
+            },
+            Some(ts) => Ok(ts.instantiate(&mut self.ctx.borrow_mut())),
+        }
+    }
+
+    pub fn check(&self, item: &Item) -> Result<(), TypeError> {
+        match item {
+            Item::Module { items, .. } => {
+                for item in items {
+                    self.check(item)?;
+                }
             }
+            Item::Definition { name, ann, expr } => {
+                if let Some(ts) = ann {
+                    // We introduce type annotations into the algorithm
+                    // without any checks, as if it it infered them itself.
+                    // It is up to the user to make sure their annotations
+                    // are correct, that is if they choose to add them.
+                    // Annotations are almost always unecessary. Keep It Simple.
+                    self.assumptions
+                        .borrow_mut()
+                        .insert(name.clone(), ts.clone());
+                } else {
+                    // This corresponds to the [LET] rule:
+                    // We first find the most general type `te` for `expr`,
+                    // Then we "clone" the type `te` by universally quantifying
+                    // all the free type variables within it that are NOT also
+                    // free in the assumptions, the resulting polytype `ts` is
+                    // then added to the assumptions as the type of `name`.
+                    let te = expr.infer(&self)?;
+                    let free_variables = self
+                        .assumptions
+                        .borrow()
+                        .values()
+                        .flat_map(|ts| ts.free_vars())
+                        .collect::<Vec<_>>();
+                    // Variables specified by `bound` remain unquantified.
+                    let ts = te.generalize(&free_variables);
+                    self.assumptions.borrow_mut().insert(name.clone(), ts);
+                }
+            }
+            _ => unimplemented!("the item {:?} is not type-checked!", item),
         }
         for (name, ts) in self.assumptions.borrow().iter() {
             println!("{} : {}", name, ts)
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn block_explicit_return() {
+        let lexicon = Lexicon::default();
+        let block = Expr::Block {
+            body: vec![
+                Stmt::Item(Item::Definition {
+                    name: "answer".to_string(),
+                    ann: None,
+                    expr: Expr::Int(42),
+                }),
+                Stmt::Expr(Expr::Name("answer".to_string())),
+            ],
+        };
+        assert_eq!(block.infer(&lexicon), Ok(tp!(Int)));
+    }
+
+    #[test]
+    fn block_implicit_return() {
+        let lexicon = Lexicon::default();
+        let block = Expr::Block {
+            body: vec![Stmt::Item(Item::Definition {
+                name: "chimera".to_string(),
+                ann: None,
+                expr: Expr::Str("monstrous fire-breathing hybrid creature".to_string()),
+            })],
+        };
+        assert_eq!(block.infer(&lexicon), Ok(tp!(Void)));
+    }
+
+    #[test]
+    fn block_nested_block_expr() {
+        let lexicon = Lexicon::default();
+        let block = Expr::Block {
+            body: vec![
+                Stmt::Item(Item::Definition {
+                    name: "shadowed".to_string(),
+                    ann: None,
+                    expr: Expr::Bool(true),
+                }),
+                Stmt::Expr(Expr::Block {
+                    body: vec![
+                        Stmt::Item(Item::Definition {
+                            name: "shadowed".to_string(),
+                            ann: None,
+                            expr: Expr::Bool(true),
+                        }),
+                        Stmt::Expr(Expr::Int(1)),
+                    ],
+                }),
+            ],
+        };
+        assert_eq!(block.infer(&lexicon), Ok(tp!(Int)));
     }
 }

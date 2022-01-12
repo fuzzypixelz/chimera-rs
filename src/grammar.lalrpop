@@ -23,13 +23,13 @@ pub Item: Item = {
 Definition: Item = {
     Let <name: Name> <ps: Name*> <ann: NL<Ann>?> NL<Equal> <e: Expr> Newline => {
         if ps.is_empty() {
-            DName {name: n, ann: a, op, expr: e}
+            Item::Definition { name, ann, expr: e }
         } else {
             let mut expr = e;
             for param in ps.into_iter().rev() {
-                rhs_expr = Expr::Func { 
+                expr = Expr::Lambda {
                     param,
-                    expr: Box::new(rhs_expr),
+                    expr: Box::new(expr),
                 };
             }
             Item::Definition { name, ann, expr }
@@ -50,7 +50,7 @@ DataType: Item = {
 
 Variant: (String, Vec<(String, TypeSchema)>) = {
     <TypeName> NL<LBrace> 
-        <SepList<Name, Comma>>
+        <SepList<(<Name> <TypeSchema>), Comma>>
     RBrace
 };
 
@@ -132,7 +132,7 @@ Expr : Expr = {
     // TODO: See if we can remove the necessary () around |x| do .. end
     // functions by having two seperate terminals, one for "single-line"
     // lambdas and another do "multi-line" lambdas.
-    Func,
+    Lambda,
     Assign,
 };
 
@@ -153,7 +153,7 @@ NInfix: Expr = {
 };
 
 NApply: Expr = {
-    Ellipsis       => Expr::Ellipsis,
+    // Ellipsis       => Expr::Ellipsis,
     LParen RParen  => Expr::Void,
     I64            => Expr::Int(<>),
     Boolean        => Expr::Bool(<>),
@@ -171,11 +171,11 @@ Apply: Expr = {
     <l: NApply> <r: NApply> => Expr::Apply { left: Box::new(l), right: Box::new(r) },
 };
 
-Func: Expr = {
+Lambda: Expr = {
     Pipe <ps: Name+> NL<Pipe> <e: Expr> => {
         let mut lambda = e;
         for param in ps.into_iter().rev() {
-            lambda = Expr::Func { 
+            lambda = Expr::Lambda {
                 param,
                 expr: Box::new(lambda),
             };
@@ -185,15 +185,17 @@ Func: Expr = {
 };
 
 Field: Expr = {
-    <expr: NApply> Dot <name: Name> => Expr::Field { expr, name }
+    <expr: NApply> Dot <name: Name>
+        => Expr::Field { expr: Box::new(expr), name }
 };
 
 Assign: Expr = {
-    <left: Field> Equal <right: Expr> => Expr::Assign { left, right }
+    <left: Field> Equal <right: Expr>
+        => Expr::Assign { left: Box::new(left), right: Box::new(right) }
 };
 
 Block: Vec<Stmt> = {
-    Expr    => vec![Stmt:Expr(<>)],
+    Expr    => vec![Stmt::Expr(<>)],
     <Stmt+>
 };
 
@@ -206,7 +208,7 @@ Branch: Expr = {
             // If the user doesn't provide an else clause
             // we insert one with a `()` expression which
             // forces the entire expression to have type Void.
-            None    => vec![Stmt::Compute(Expr::Void)],
+            None    => vec![Stmt::Expr(Expr::Void)],
             Some(v) => v
         };
         let mut paths = vec![(e, b1)];
@@ -216,13 +218,13 @@ Branch: Expr = {
     }
 };
 
-List: Expr = {
-    NL<LBrack> <v: SepList<Expr, NL<Comma>>> RBrack => Expr::List(v)
-};
+// List: Expr = {
+//     NL<LBrack> <v: SepList<Expr, NL<Comma>>> RBrack => Expr::List(v)
+// };
 
-Array: Expr = {
-    Hash NL<LBrack> <v: SepList<Expr, NL<Comma>>> RBrack => Expr::Array(v)
-};
+// Array: Expr = {
+//     Hash NL<LBrack> <v: SepList<Expr, NL<Comma>>> RBrack => Expr::Array(v)
+// };
 
 I64: i64 = <"Int"> => match <> {
     Tok::IntLiteral(i)  => i,

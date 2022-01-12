@@ -1,4 +1,3 @@
-use fnv::FnvHashMap;
 use polytype::TypeSchema;
 
 #[derive(Debug, PartialEq, Clone)]
@@ -34,7 +33,6 @@ pub enum Stmt {
 #[derive(Debug, PartialEq, Clone)]
 pub enum Expr {
     // Primitives
-    Ellipsis, // ...
     Void,     // ()
     Int(i64), // 42
     // U64(u64),

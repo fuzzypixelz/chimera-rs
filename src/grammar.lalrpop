@@ -13,51 +13,48 @@ use crate::error::LexicalError;
 // once the non-terminal is fully parsed.
 grammar<'input>(input: &'input str, type_builder: &mut HashMap<String, usize>);
 
-pub Item: Item = {
+pub Program: Vec<Item> = Item*;
+
+Item: Item = {
+    <attrs: Attr*> <kind: ItemKind> => Item { attrs, kind }
+};
+
+Attr: Attr = {
+    At LBrack <name: Name> LParen <args: SepList<Expr, Comma>> RParen RBrack Newline
+        => Attr { name, args }
+};
+
+
+pub ItemKind: ItemKind = {
     Definition,
-    Attribute,
     DataType,
     Module,
 };
 
-Definition: Item = {
-    Let <name: Name> <ps: Name*> <ann: NL<Ann>?> NL<Equal> <e: Expr> Newline => {
-        if ps.is_empty() {
-            Item::Definition { name, ann, expr: e }
-        } else {
-            let mut expr = e;
-            for param in ps.into_iter().rev() {
-                expr = Expr::Lambda {
-                    param,
-                    expr: Box::new(expr),
-                };
-            }
-            Item::Definition { name, ann, expr }
-        }
+Definition: ItemKind = {
+    Let <name: Name> <ann: NL<Ann>?> NL<Equal> <expr: Expr> Newline
+        => ItemKind::Definition { name, ann, expr }
+};
+
+DataType: ItemKind = {
+    Data <schema: TypeSchema> Newline
+        <variants: SepList<Variant, NL<Comma>>>
+    NL<End> => {
+        type_builder.clear();
+        ItemKind::DataType { schema, variants }
     }
-};
-
-Attribute: Item = {
-    At LBrack <name: Name> LParen <args: SepList<Expr, Comma>> RParen RBrack Newline
-        => Item::Attribute { name, args }
-};
-
-DataType: Item = {
-    Data <kind: TypeSchema> Newline
-        <variants: SepList<Variant, Comma>>
-    End => Item::DataType { kind, variants }
 };
 
 Variant: (String, Vec<(String, TypeSchema)>) = {
     <TypeName> NL<LBrace> 
-        <SepList<(<Name> <TypeSchema>), Comma>>
+        <SepList<(<Name> Colon <TypeSchema>), NL<Comma>>>
     RBrace
 };
 
-Module: Item = {
+Module: ItemKind = {
     Mod <name: Name> Newline
         <items: Item*> 
-    End => Item::Module { name, items }
+    End => ItemKind::Module { name, items }
 };
 
 Ann: TypeSchema = {
@@ -74,11 +71,11 @@ SimpleMonoType: Type = {
     LParen <MonoType> RParen,
     // NOTE: the convention is that type-variables are lower-case,
     // but constructor names start with an upper-case.
-    <v: Name> => Type::Variable(
+    <v: Name> => { dbg!(&type_builder, &v); Type::Variable(
         // FIXME: Figure out how to do proper error reporting
         // in the parser! (probably by passing in a mut data-type).
         *type_builder.get(&v).unwrap()
-    )
+    ) }
 }
 
 MonoType: Type = {
@@ -127,48 +124,13 @@ Stmt: Stmt = {
     <Expr> Newline => Stmt::Expr(<>),
 };
 
-Expr : Expr = {
+Expr: Expr = {
     Infix,
     // TODO: See if we can remove the necessary () around |x| do .. end
     // functions by having two seperate terminals, one for "single-line"
     // lambdas and another do "multi-line" lambdas.
     Lambda,
     Assign,
-};
-
-Infix: Expr = {
-    NInfix,
-    <l: Infix> <op: OP> <r: NInfix> => Expr::Apply {
-        left: Box::new(Expr::Apply { 
-            left:  Box::new(Expr::Name(op)),
-            right: Box::new(l)
-        }),
-        right: Box::new(r)
-    },
-};
-
-NInfix: Expr = {
-    Apply,
-    NApply,
-};
-
-NApply: Expr = {
-    // Ellipsis       => Expr::Ellipsis,
-    LParen RParen  => Expr::Void,
-    I64            => Expr::Int(<>),
-    Boolean        => Expr::Bool(<>),
-    Char           => Expr::Char(<>),
-    Str            => Expr::Str(<>),
-    Name           => Expr::Name(<>),
-    Branch,
-    Field,
-    NL<Do> <Block> End => Expr::Block { body: <> },
-    LParen <Expr> RParen,
-};
-
-Apply: Expr = {
-    <l: Apply>  <r: NApply>  => Expr::Apply { left: Box::new(l), right: Box::new(r) },
-    <l: NApply> <r: NApply> => Expr::Apply { left: Box::new(l), right: Box::new(r) },
 };
 
 Lambda: Expr = {
@@ -184,19 +146,64 @@ Lambda: Expr = {
     }
 };
 
-Field: Expr = {
-    <expr: NApply> Dot <name: Name>
-        => Expr::Field { expr: Box::new(expr), name }
+Infix: Expr = {
+    NInfix,
+    <l: Infix> <op: OP> <r: NInfix> => Expr::Apply {
+        left: Box::new(Expr::Apply { 
+            left: Box::new(Expr::Name(op)),
+            right: Box::new(l)
+        }),
+        right: Box::new(r)
+    },
 };
 
-Assign: Expr = {
-    <left: Field> Equal <right: Expr>
-        => Expr::Assign { left: Box::new(left), right: Box::new(right) }
+NInfix: Expr = {
+    Apply,
+    NApply,
+};
+ 
+NApply: Expr = {
+    Void,
+    Int,
+    Bool,
+    Char,
+    Str,
+    Ident,
+    Branch,
+    Field,
+    NL<Do> <Block> End => Expr::Block { body: <> },
+    LParen <Expr> RParen,
 };
 
-Block: Vec<Stmt> = {
-    Expr    => vec![Stmt::Expr(<>)],
-    <Stmt+>
+Void: Expr = {
+    LParen RParen => Expr::Void
+};
+
+Int: Expr = {
+    "Int" => match <> {
+        Tok::IntLiteral(i)  => Expr::Int(i),
+        _ => unreachable!()
+    }
+};
+
+Bool: Expr = {
+    True  => Expr::Bool(true),
+    False => Expr::Bool(false)
+};
+
+Char: Expr = {
+    "Char" => match <> {
+        Tok::CharLiteral(c)  => Expr::Char(c),
+        _ => unreachable!()
+    }
+};
+
+Str: Expr = {
+    "Str" => Expr::Str(<>.to_string())
+};
+
+Ident: Expr = {
+    Name => Expr::Name(<>)
 };
 
 Branch: Expr = {
@@ -204,6 +211,8 @@ Branch: Expr = {
     <b2: (NL<Elif> <Expr> NL<Then> <Block>)*> 
     <b3: (NL<Else> <Block>)?> End
     => { 
+        // FIXME: the parser should not arbitrarily insert AST nodes,
+        // this should ideally be moved much further down.
         let b3 = match b3 {
             // If the user doesn't provide an else clause
             // we insert one with a `()` expression which
@@ -213,11 +222,34 @@ Branch: Expr = {
         };
         let mut paths = vec![(e, b1)];
         paths.extend(b2.into_iter());
-        paths.push((Expr::Bool(true), b3));
+        paths.push((
+            Expr::Bool(true),
+            b3
+        ));
         Expr::Branch { paths }
     }
 };
 
+Block: Vec<Stmt> = {
+    Expr    => vec![Stmt::Expr(<>)],
+    <Stmt+>
+};
+
+Apply: Expr = {
+    <l: Apply>  <r: NApply> => Expr::Apply { left: Box::new(l), right: Box::new(r) },
+    <l: NApply> <r: NApply> => Expr::Apply { left: Box::new(l), right: Box::new(r) },
+};
+
+Field: Expr = {
+    <expr: NApply> Dot <name: Name>
+        => Expr::Field { expr: Box::new(expr), name }
+};
+
+Assign: Expr = {
+    <left: Field> Equal <right: Expr>
+        => Expr::Assign { left: Box::new(left), right: Box::new(right) }
+};
+ 
 // List: Expr = {
 //     NL<LBrack> <v: SepList<Expr, NL<Comma>>> RBrack => Expr::List(v)
 // };
@@ -226,28 +258,13 @@ Branch: Expr = {
 //     Hash NL<LBrack> <v: SepList<Expr, NL<Comma>>> RBrack => Expr::Array(v)
 // };
 
-I64: i64 = <"Int"> => match <> {
-    Tok::IntLiteral(i)  => i,
-    _ => unreachable!()
-};
-
-Char: char = <"Char"> => match <> {
-    Tok::CharLiteral(c)  => c,
-    _ => unreachable!()
-};
-
-Boolean: bool = {
-    True  => true,
-    False => false
-};
-
 TypeName: String = <"TypeName"> => <>.to_string();
 Name:     String = {
     <"Name"> => <>.to_string(),
     LParen <OP> RParen
 };
+
 OP:       String = <"OP">   => format!("({})", <>).to_string();
-Str:      String = <"Str">  => <>.to_string();
 
 NL<T>: T     = <T> Newline?;
 

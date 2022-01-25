@@ -10,7 +10,8 @@ use anyhow::{Context, Result};
 use parser::parse;
 
 use crate::code::{Code, Cont, Env};
-use crate::typechecker::Lexicon;
+
+// use crate::typechecker::Lexicon;
 
 mod ast;
 mod code;
@@ -37,7 +38,7 @@ lalrpop_mod!(#[allow(clippy::all)] pub grammar);
 fn main() -> Result<()> {
     let filename = env::args()
         .nth(1)
-        .with_context(|| "no src file was specified")?;
+        .with_context(|| "no source file was specified")?;
 
     let source = fs::read_to_string(&filename).with_context(|| {
         format!(

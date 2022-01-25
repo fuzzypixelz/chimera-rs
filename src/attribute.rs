@@ -2,17 +2,16 @@ use std::cell::RefCell;
 use std::io::{self, Read};
 use std::rc::Rc;
 
-use crate::ast::Expr;
 use crate::code::CompiledCode;
 use crate::Env;
 use crate::value::{List, Value, WoValue};
 
 pub fn intrinsic(name: &str) -> Value {
     match name {
-        "dump" => Value::Lambda {
+        "print" => Value::Lambda {
             param: "value".to_string(),
             body: Rc::new(CompiledCode::new(move |env, _cont| {
-                let value = Env::get_name(env.clone(), "value");
+                let value = Env::get_name(env, "value");
                 print!("{}", value.borrow());
                 Value::Void.into()
             })),
@@ -20,7 +19,7 @@ pub fn intrinsic(name: &str) -> Value {
         },
         "read" => Value::Lambda {
             param: "_".to_string(),
-            body: Rc::new(CompiledCode::new(move |env, _cont| {
+            body: Rc::new(CompiledCode::new(move |_env, _cont| {
                 let mut buffer = String::new();
                 io::stdin()
                     .read_to_string(&mut buffer)
@@ -41,7 +40,7 @@ pub fn intrinsic(name: &str) -> Value {
                     param: "y".to_string(),
                     body: Rc::new(CompiledCode::new(move |env, _cont| {
                         let x = Env::get_name(env.clone(), "x");
-                        let y = Env::get_name(env.clone(), "y");
+                        let y = Env::get_name(env, "y");
                         Value::Bool(x == y)
                             .into()
                     })),
@@ -60,7 +59,7 @@ pub fn intrinsic(name: &str) -> Value {
                         = *Env::get_name(env.clone(), "x").borrow()
                         {
                             if let Value::Int(r)
-                            = *Env::get_name(env.clone(), "y").borrow() {
+                            = *Env::get_name(env, "y").borrow() {
                                 Value::Int(l + r).into()
                             } else {
                                 unreachable!()
@@ -84,7 +83,7 @@ pub fn intrinsic(name: &str) -> Value {
                         = *Env::get_name(env.clone(), "x").borrow()
                         {
                             if let Value::Int(r)
-                            = *Env::get_name(env.clone(), "y").borrow() {
+                            = *Env::get_name(env, "y").borrow() {
                                 Value::Int(l - r).into()
                             } else {
                                 unreachable!()
@@ -108,7 +107,7 @@ pub fn intrinsic(name: &str) -> Value {
                         = *Env::get_name(env.clone(), "x").borrow()
                         {
                             if let Value::Int(r)
-                            = *Env::get_name(env.clone(), "y").borrow() {
+                            = *Env::get_name(env, "y").borrow() {
                                 Value::Int(l * r).into()
                             } else {
                                 unreachable!()
@@ -132,7 +131,7 @@ pub fn intrinsic(name: &str) -> Value {
                         = *Env::get_name(env.clone(), "x").borrow()
                         {
                             if let Value::Int(r)
-                            = *Env::get_name(env.clone(), "y").borrow() {
+                            = *Env::get_name(env, "y").borrow() {
                                 Value::Int(l / r).into()
                             } else {
                                 unreachable!()
@@ -156,7 +155,7 @@ pub fn intrinsic(name: &str) -> Value {
                         = *Env::get_name(env.clone(), "x").borrow()
                         {
                             if let Value::Int(r)
-                            = *Env::get_name(env.clone(), "y").borrow() {
+                            = *Env::get_name(env, "y").borrow() {
                                 Value::Int(l % r).into()
                             } else {
                                 unreachable!()
@@ -178,7 +177,7 @@ pub fn intrinsic(name: &str) -> Value {
                     body: Rc::new(CompiledCode::new(move |env, _cont| {
                         let elem = Env::get_name(env.clone(), "elem");
                         if let Value::List(list)
-                        = &*Env::get_name(env.clone(), "list").borrow() {
+                        = &*Env::get_name(env, "list").borrow() {
                             Value::List(List::Cons(
                                 elem,
                                 Box::new(list.clone()),
@@ -196,7 +195,7 @@ pub fn intrinsic(name: &str) -> Value {
             param: "list".to_string(),
             body: Rc::new(CompiledCode::new(move |env, _cont| {
                 if let Value::List(list)
-                = &*Env::get_name(env.clone(), "list").borrow() {
+                = &*Env::get_name(env, "list").borrow() {
                     match list {
                         List::Nil => panic!("chimera: head: empty list."),
                         List::Cons(h, _) => h.clone(),
@@ -211,7 +210,7 @@ pub fn intrinsic(name: &str) -> Value {
             param: "list".to_string(),
             body: Rc::new(CompiledCode::new(move |env, _cont| {
                 if let Value::List(list)
-                = &*Env::get_name(env.clone(), "list").borrow() {
+                = &*Env::get_name(env, "list").borrow() {
                     match list {
                         List::Nil => panic!("chimera: tail: empty list."),
                         List::Cons(_, t) => Value::List(*t.clone()).into(),

@@ -45,7 +45,7 @@ impl<'a> Infer<Lexicon<'a>, TypeError> for Expr {
             // a polytype `ts`, otherwise the algorithm fails.
             // We then specialize `ts` to a monotype `t` by replacing the bounded type
             // variables by fresh new ones; `t` is then the type of `name`.
-            Expr::Name(name) => lexicon.get(&name),
+            Expr::Name(name) => lexicon.get(name),
             // This corresponds to the [APP] rule:
             // Only this rule forces refinement of the type variables introduced.
             // We recursively call J to infer the type of `left` and `right`,
@@ -86,10 +86,9 @@ impl<'a> Infer<Lexicon<'a>, TypeError> for Expr {
             // the type of the block, otherwise a Void type is assumed.
             // Currently all Item's are ignored.
             Expr::Block { body } => {
-                let mut local_lexicon = Lexicon::default();
+                let local_lexicon = Lexicon { outer: Some(lexicon), ..Default::default() };
                 // FIXME: this clones the entire "list" of lexicons
                 // each time it entered a new block, not good.
-                local_lexicon.outer = Some(lexicon);
                 let (last, init) = body.split_last().unwrap();
                 for stmt in init {
                     match stmt {
@@ -148,7 +147,7 @@ impl<'a> Lexicon<'a> {
                     // all the free type variables within it that are NOT also
                     // free in the assumptions, the resulting polytype `ts` is
                     // then added to the assumptions as the type of `name`.
-                    let te = expr.infer(&self)?;
+                    let te = expr.infer(self)?;
                     let free_variables = self
                         .assumptions
                         .borrow()
@@ -184,7 +183,7 @@ mod tests {
                         ann: None,
                         expr: Expr::Int(42),
                     },
-                    attrs: vec![],
+                    attr: None,
                 }),
                 Stmt::Expr(Expr::Name("answer".to_string())),
             ],
@@ -202,7 +201,7 @@ mod tests {
                     ann: None,
                     expr: Expr::Str("monstrous fire-breathing hybrid creature".to_string()),
                 },
-                attrs: vec![],
+                attr: None,
             })],
         };
         assert_eq!(block.infer(&lexicon), Ok(tp!(Void)));
@@ -219,7 +218,7 @@ mod tests {
                         ann: None,
                         expr: Expr::Bool(true),
                     },
-                    attrs: vec![],
+                    attr: None,
                 }),
                 Stmt::Expr(Expr::Block {
                     body: vec![
@@ -229,7 +228,7 @@ mod tests {
                                 ann: None,
                                 expr: Expr::Int(0),
                             },
-                            attrs: vec![],
+                            attr: None,
                         }),
                         Stmt::Expr(Expr::Name("shadowed".to_string())),
                     ],

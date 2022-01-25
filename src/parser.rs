@@ -1,22 +1,25 @@
-use crate::error::LexicalError;
-use crate::lexer::Lexer;
-use crate::{ast::Item, lexer::Tok};
+use std::collections::HashMap;
+
 use annotate_snippets::{
     display_list::{DisplayList, FormatOptions},
     snippet::{Annotation, AnnotationType, Slice, Snippet, SourceAnnotation},
 };
 use anyhow::{Error, Result};
 use lalrpop_util::ParseError;
-use std::collections::HashMap;
+
+use crate::{ast::Item, lexer::Tok};
+use crate::error::LexicalError;
+use crate::lexer::Lexer;
 
 pub fn parse(source: &str) -> Result<Vec<Item>> {
-    let lexer = Lexer::new(&source);
-    let result = crate::grammar::ProgramParser::new().parse(&source, &mut HashMap::new(), lexer);
+    let lexer = Lexer::new(source);
+    let result = crate::grammar::ProgramParser::new().parse(source, &mut HashMap::new(), lexer);
     match result {
         Ok(program) => Ok(program),
-        Err(error) => Err(Error::msg(fmt_parse_error(&source, error))),
+        Err(error) => Err(Error::msg(fmt_parse_error(source, error))),
     }
 }
+
 /// Takes information extracted from a `TypeError` and the relevant source code
 /// to produce a pretty printed annotated-snippet. This is meant to be wrapped
 /// in `anyhow::Error::msg` for use in `main`.
@@ -98,9 +101,11 @@ fn ann_parse_error(source: &str, label: &str, slice_label: &str, range: (usize, 
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::ast::*;
     use ::polytype::*;
+
+    use crate::ast::*;
+
+    use super::*;
 
     #[test]
     fn empty_program() {
@@ -126,7 +131,7 @@ mod tests {
                     name: "answer".to_string(),
                     ann: None,
                     expr: Expr::Int(42),
-                }
+                },
             }])
         )
     }
@@ -146,7 +151,7 @@ mod tests {
                     name: "truth".to_string(),
                     ann: None,
                     expr: Expr::Bool(true),
-                }
+                },
             }])
         )
     }
@@ -166,7 +171,7 @@ mod tests {
                     name: "most_iconic_lang".to_string(),
                     ann: None,
                     expr: Expr::Char('C'),
-                }
+                },
             }])
         )
     }
@@ -186,7 +191,7 @@ mod tests {
                     name: "hello".to_string(),
                     ann: None,
                     expr: Expr::Str("Hello, World!".to_string()),
-                }
+                },
             }])
         )
     }
@@ -206,7 +211,7 @@ mod tests {
                     name: "hello".to_string(),
                     ann: None,
                     expr: Expr::Name("hi".to_string()),
-                }
+                },
             }])
         )
     }
@@ -228,7 +233,7 @@ mod tests {
                     expr: Expr::Branch {
                         paths: vec![(Expr::Bool(true), vec![Stmt::Expr(Expr::Int(1))])]
                     },
-                }
+                },
             }])
         )
     }
@@ -245,13 +250,13 @@ mod tests {
             Ok(vec![Item {
                 attrs: vec![Attr {
                     name: "intrinsic".to_string(),
-                    args: vec![Expr::Void]
+                    args: vec![Expr::Void],
                 }],
                 kind: ItemKind::Definition {
                     name: "name_with_attr".to_string(),
                     ann: Some(ptp!(Void)),
-                    expr: Expr::Void
-                }
+                    expr: Expr::Void,
+                },
             }])
         )
     }
@@ -278,9 +283,9 @@ mod tests {
                         ("Left".to_string(), vec![]),
                         ("Right".to_string(), vec![]),
                         ("Up".to_string(), vec![]),
-                        ("Down".to_string(), vec![])
-                    ]
-                }
+                        ("Down".to_string(), vec![]),
+                    ],
+                },
             }])
         )
     }
@@ -309,10 +314,10 @@ mod tests {
                         vec![
                             ("name".to_string(), ptp!(Str)),
                             ("age".to_string(), ptp!(Int)),
-                            ("job".to_string(), ptp!(Job))
+                            ("job".to_string(), ptp!(Job)),
                         ]
-                    )]
-                }
+                    )],
+                },
             }])
         )
     }

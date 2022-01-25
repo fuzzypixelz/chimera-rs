@@ -1,7 +1,7 @@
 " Vim syntax file
 " Language: Chimera
 " Maintainer: Mahmoud Mazouz
-" Latest Revision: 12 January 2022
+" Latest Revision: 25 January 2022
 
 if exists("b:current_syntax")
     finish
@@ -44,4 +44,3 @@ hi def link chiMacro     Macro
 hi def link chiAttr      Identifier
 hi def link chiTypeName  Type
 hi def link chiDelimiter Delimiter
-

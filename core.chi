@@ -5,6 +5,7 @@
 -- equivalent to (e1 OP e2) OP e3. Partly (mostly)
 -- because this is the simplest way to parse them :^)
 --: a -> (a -> b) -> b
+
 let (|>) = |x f| f x
 
 --: (a -> b) -> a -> b
@@ -22,6 +23,7 @@ let (>>) = |f g x| g (f x)
 -- end
 -- The @-things and their args are special expressions
 -- whoose meaning is determined by the interpreter.
+
 @[intrinsic(add)]
 let (+) : Int -> Int -> Int
     = ...
@@ -73,6 +75,7 @@ let hcf : Void -> Void = |_| do
     0 / 0
 end
 
+
 let (?) : forall a. a -> Str -> a = |e n| do
     dump "[debug] "
     dump n 
@@ -91,6 +94,7 @@ let (?=) : forall a. a -> a -> Void = |x y| do
         hcf ()
     end
 end
+
 
 @[intrinsic(cons)]
 let (::) : forall a. List a -> List a -> List a 
@@ -217,6 +221,7 @@ let tests = do
     sum [1, 2, 3] ?= 6
 
     let even = |x| x % 2 == 0
+    
     filter even [1, 2, 3, 4] ?= [2, 4]
 
     reverse [1, 2, 3] ?= [3, 2, 1]

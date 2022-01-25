@@ -1,49 +1,46 @@
 " Vim syntax file
 " Language: Chimera
 " Maintainer: Mahmoud Mazouz
-" Latest Revision: 12 January 2022
+" Latest Revision: 25 January 2022
 
 if exists("b:current_syntax")
     finish
 endif
 
-syn keyword woTodo      contained TODO FIXME HACK NOTE
-syn match   woComment   "--.*$" contains=woTodo
+syn keyword chiTodo      contained TODO FIXME HACK NOTE
+syn match   chiComment   "--.*$" contains=chiTodo
 
-syn match   woNumber    '\d\+'
-syn match   woNumber    '[-+]\d\+'
-syn match   woString    '"[^"]*"'
-syn match   woChar      "'.'"
-syn match   woVoid      '(\s*)'
-syn match   woEllipsis  '\.\.\.'
-syn keyword woBool      true false
+syn match   chiNumber    '\d\+'
+syn match   chiNumber    '[-+]\d\+'
+syn match   chiString    '"[^"]*"'
+syn match   chiChar      "'\\.'"
+syn match   chiChar      "'.'" 
+syn match   chiVoid      '(\s*)'
+syn match   chiEllipsis  '\.\.\.'
+syn keyword chiBool      true false
 
-syn match   woName      '[a-z_][b-zA-Z_0-9]*'
-syn match   woIntrinsic '@[a-z][a-zA-Z_0-9]*'
-syn match   woMacro     '[a-z][a-zA-Z_0-9]*!'
-syn match   woTypeName  '[A-Z][a-zA-Z0-9]*'
+syn match   chiName      '[a-z_][b-zA-Z_0-9]*'
+syn match   chiAttr      '@\[.*\]'
+syn match   chiMacro     '[a-z][a-zA-Z_0-9]*!'
+syn match   chiTypeName  '[A-Z][a-zA-Z0-9]*'
 
-syn keyword woKeywords  let var type macro 
-syn keyword woKeywords  import export
-syn keyword woKeywords  do end
-syn keyword woKeywords  fn data actor forall
-syn keyword woKeywords  if then elif else
-syn keyword woKeywords  loop while break
+syn keyword chiKeywords  let do end
+syn keyword chiKeywords  data forall
+syn keyword chiKeywords  if then elif else
+syn keyword chiKeywords  loop break
 
 let b:current_syntax = "chimera"
 
-hi def link woTodo      Todo
-hi def link woKeywords  Keyword
-hi def link woComment   Comment
-hi def link woNumber    Number
-hi def link woString    String
-hi def link woChar      Character
-hi def link woBool      Boolean
-hi def link woVoid      Constant
-hi def link woEllipsis  Error
-hi def link woName      Function
-hi def link woMacro     Macro
-hi def link woIntrinsic Identifier
-hi def link woTypeName  Type
-hi def link woDelimiter Delimiter
-
+hi def link chiTodo      Todo
+hi def link chiKeywords  Keyword
+hi def link chiComment   Comment
+hi def link chiNumber    Number
+hi def link chiString    String
+hi def link chiChar      Character
+hi def link chiBool      Boolean
+hi def link chiVoid      Constant
+hi def link chiName      Function
+hi def link chiMacro     Macro
+hi def link chiAttr      Identifier
+hi def link chiTypeName  Type
+hi def link chiDelimiter Delimiter

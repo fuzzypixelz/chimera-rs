@@ -1,6 +1,0 @@
-import core
-
-let main ~ do
-    -- TODO: prove that Woland is Turing-Complete!
-    ...
-end

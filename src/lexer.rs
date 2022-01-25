@@ -1,8 +1,9 @@
-use crate::error::LexicalError;
 use std::fmt::Display;
 use std::iter::Peekable;
 use std::str::CharIndices;
 use std::str::FromStr;
+
+use crate::error::LexicalError;
 
 pub type Spanned<'input> = Result<(usize, Tok<'input>, usize), LexicalError>;
 
@@ -20,17 +21,13 @@ pub enum Tok<'input> {
     Ellipsis,
 
     At,
-    Excl,
     Dot,
-    Dollar,
 
+    Mod,
     Let,
     Do,
     End,
-    Var,
-    Type,
-    Macro,
-    Import,
+    Data,
     Forall,
 
     True,
@@ -40,16 +37,11 @@ pub enum Tok<'input> {
     Elif,
     Else,
 
-    Fn,
-
     Loop,
-    While,
-
     Break,
 
     Colon,
     Arrow,
-    DArrow,
     Pipe,
     Comma,
     Equal,
@@ -58,24 +50,21 @@ pub enum Tok<'input> {
 
     LParen,
     RParen,
+    LBrace,
+    RBrace,
     LBrack,
     RBrack,
-    LSBrack,
-    RSBrack,
 
     Newline,
 }
 
 pub static RESERVED_NAMES: phf::Map<&'static str, Tok> = phf::phf_map! {
+    "mod"       => Tok::Mod,
     "let"       => Tok::Let,
     "do"        => Tok::Do,
     "end"       => Tok::End,
-    "var"       => Tok::Var,
-    "type"      => Tok::Type,
+    "data"      => Tok::Data,
     "forall"    => Tok::Forall,
-    "macro"     => Tok::Macro,
-    "import"    => Tok::Import,
-    "fn"        => Tok::Fn,
     "true"      => Tok::True,
     "false"     => Tok::False,
     "if"        => Tok::If,
@@ -83,7 +72,6 @@ pub static RESERVED_NAMES: phf::Map<&'static str, Tok> = phf::phf_map! {
     "elif"      => Tok::Elif,
     "else"      => Tok::Else,
     "loop"      => Tok::Loop,
-    "while"     => Tok::While,
     "break"     => Tok::Break,
 };
 
@@ -91,13 +79,10 @@ pub static RESERVED_SYMBOLS: phf::Map<&'static str, Tok> = phf::phf_map! {
     "..." => Tok::Ellipsis,
     ":"   => Tok::Colon,
     "->"  => Tok::Arrow,
-    "=>"  => Tok::DArrow,
     "|"   => Tok::Pipe,
     "="   => Tok::Equal,
     "~"   => Tok::Tilde,
     "@"   => Tok::At,
-    "!"   => Tok::Excl,
-    "$"   => Tok::Dollar,
     "."   => Tok::Dot,
     "#"   => Tok::Hash,
 };
@@ -116,8 +101,8 @@ impl<'input> Lexer<'input> {
     }
 
     fn take_while<F>(&mut self, start: usize, mut predicate: F) -> (usize, &'input str)
-    where
-        F: FnMut(char) -> bool,
+        where
+            F: FnMut(char) -> bool,
     {
         while let Some(&(end, c)) = self.chars.peek() {
             if !predicate(c) {
@@ -174,14 +159,33 @@ impl<'input> Lexer<'input> {
         self.chars.next(); // Consume the opening double quotes.
         let (end, src) = self.take_while(start + 1, |b| b != '"');
         self.chars.next(); // Consume the ending double quotes.
-        Ok((start, Tok::StrLiteral(src), end + 1))
+        Ok((start, Tok::StrLiteral(src), end))
     }
 
     fn character(&mut self, start: usize) -> Spanned<'input> {
         self.chars.next();
-        let (_, src) = self.chars.next().ok_or(LexicalError::InvalidSyntax)?;
+        let (_, src) = self
+            .chars
+            .next()
+            .ok_or(LexicalError::InvalidSyntax)?;
+        let token = if src == '\\' {
+            let (_, escape) = self
+                .chars
+                .next()
+                .ok_or(LexicalError::InvalidSyntax)?;
+            Tok::CharLiteral(match escape {
+                '\\' => '\\',
+                '\'' => '\'',
+                'n' => '\n',
+                'r' => '\r',
+                't' => '\t',
+                _ => return Err(LexicalError::InvalidSyntax)
+            })
+        } else {
+            Tok::CharLiteral(src)
+        };
         self.chars.next();
-        Ok((start, Tok::CharLiteral(src), start + 3))
+        Ok((start, token, start + 3))
     }
 }
 
@@ -238,19 +242,19 @@ impl<'input> Iterator for Lexer<'input> {
                 }
                 '{' => {
                     self.chars.next();
-                    Some(Ok((start, Tok::LBrack, start + 1)))
+                    Some(Ok((start, Tok::LBrace, start + 1)))
                 }
                 '}' => {
                     self.chars.next();
-                    Some(Ok((start, Tok::RBrack, start + 1)))
+                    Some(Ok((start, Tok::RBrace, start + 1)))
                 }
                 '[' => {
                     self.chars.next();
-                    Some(Ok((start, Tok::LSBrack, start + 1)))
+                    Some(Ok((start, Tok::LBrack, start + 1)))
                 }
                 ']' => {
                     self.chars.next();
-                    Some(Ok((start, Tok::RSBrack, start + 1)))
+                    Some(Ok((start, Tok::RBrack, start + 1)))
                 }
                 ',' => {
                     self.chars.next();

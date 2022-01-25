@@ -1,0 +1,6 @@
+import core
+
+let main ~ do
+    -- TODO: prove that Chimera is Turing-Complete!
+    ...
+end

@@ -1,7 +1,9 @@
-use crate::value::WoValue;
-use fnv::FnvHashMap;
 use std::cell::RefCell;
 use std::rc::Rc;
+
+use fnv::FnvHashMap;
+
+use crate::value::WoValue;
 
 /// A data-type is `Code` if it can produce a function from `(Env, Cont)` to `Value`,
 /// this Fn is used to (sort of) JIT compile `Expr`'s and `Instr`'s to reusable bits.
@@ -79,7 +81,7 @@ impl Env {
         if !env.borrow().vars.contains_key(name) {
             match env.borrow().outer.clone() {
                 None => {
-                    panic!("Woland: `{}` is not a defined mutable name.", name)
+                    panic!("chimera: `{}` is not a defined mutable name.", name)
                 }
                 Some(oenv) => Self::get_var_env(oenv, name),
             }
@@ -101,7 +103,7 @@ impl Env {
                     // I would argue it's acceptable since Algorithm J is mathematically
                     // proven to always correcly infer the most general type for an expr,
                     // of course, I can't same say the same for my implementation of it :^).
-                    None => panic!("Woland: `{}` is not a defined (mutable) name.", name),
+                    None => panic!("chimera: `{}` is not a defined (mutable) name.", name),
                     Some(oenv) => Self::get_name(oenv, name),
                 }
             } else {

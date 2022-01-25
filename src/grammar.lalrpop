@@ -13,37 +13,52 @@ use crate::error::LexicalError;
 // once the non-terminal is fully parsed.
 grammar<'input>(input: &'input str, type_builder: &mut HashMap<String, usize>);
 
-pub AST: AST = {
-    <m: Mod> <ds: Def+> => AST { module: m, defs: ds },
+pub Program: Vec<Item> = Item*;
+
+Item: Item = {
+    <attr: Attr?> <kind: ItemKind> => Item { attr, kind }
 };
 
-Mod: Mod = {
-    <is: (Import <Name> Newline)*> => Mod { imports: is }
-}
-
-pub Def: Def = {
-    <DName>  => Def::Name(<>),
+Attr: Attr = {
+    "@" "[" <name: Name> "(" <args: SepList<Name, ",">> ")" "]" "newline"
+        => Attr { name, args }
 };
 
-DName: DName = {
-    Let <n: Name> <ps: Name*> <a: NL<Ann>?> <op: NL<AOP>> <e: Expr> Newline => {
-        if ps.is_empty() {
-            DName {name: n, ann: a, op, expr: e}
-        } else {
-            let mut rhs_expr = e;
-            for param in ps.into_iter().rev() {
-                rhs_expr = Expr::Func { 
-                    param,
-                    expr: Box::new(rhs_expr),
-                };
-            }
-            DName { name: n, ann: a, op, expr: rhs_expr }
-        }
+
+pub ItemKind: ItemKind = {
+    Definition,
+    DataType,
+    Module,
+};
+
+Definition: ItemKind = {
+    "let" <name: Name> <ann: NL<Ann>?> NL<"="> <expr: Expr> "newline"
+        => ItemKind::Definition { name, ann, expr }
+};
+
+DataType: ItemKind = {
+    "data" <schema: TypeSchema> "newline"
+        <variants: SepList<Variant, NL<",">>>
+    NL<"end"> => {
+        type_builder.clear();
+        ItemKind::DataType { schema, variants }
     }
 };
 
+Variant: (String, Vec<(String, TypeSchema)>) = {
+    <TypeName> NL<"{">
+        <SepList<(<Name> ":" <TypeSchema>), NL<",">>>
+    "}"
+};
+
+Module: ItemKind = {
+    "mod" <name: Name> "newline"
+        <items: Item*> 
+    "end" => ItemKind::Module { name, items }
+};
+
 Ann: TypeSchema = {
-    Colon <TypeSchema> => {
+    ":" <TypeSchema> => {
         // The type_build should always be empty before we
         // start parsing a type annotation; it's empty when
         // first created so this is fully guaranteed.
@@ -53,7 +68,7 @@ Ann: TypeSchema = {
 };
 
 SimpleMonoType: Type = {
-    LParen <MonoType> RParen,
+    "(" <MonoType> ")",
     // NOTE: the convention is that type-variables are lower-case,
     // but constructor names start with an upper-case.
     <v: Name> => Type::Variable(
@@ -64,7 +79,7 @@ SimpleMonoType: Type = {
 }
 
 MonoType: Type = {
-    <SimpleMonoType>,
+    SimpleMonoType,
     <n: TypeName> <ps: SimpleMonoType*> => Type::Constructed(
         // TODO: is it better to lear the String or to switch N to String,
         // alltogether? At least in the second case the names will be freed
@@ -80,10 +95,10 @@ MonoType: Type = {
 // since the .insert(..) wasn't getting executed before attempting
 // to parse the reset of the annotation, and so the variables weren't
 // present.
-TypeQuantifier : Variable = {
+TypeQuantifier: Variable = {
     // FIXME: we shouldn't force the poor programmers to type `forall`
     // everytime they need to do polymorphism, oh the horror!
-    Forall <v: Name> Dot => {
+    "forall" <v: Name> "." => {
         // The number of the `v` is picked as the maximum existing
         // type variable PLUS one. Otherwise we put in zero.
         let variable = match type_builder.values().max() {
@@ -96,7 +111,7 @@ TypeQuantifier : Variable = {
 }
 
 TypeSchema: TypeSchema = {
-    <SepList1<MonoType, Arrow>> => TypeSchema::Monotype(Type::from(<>)),
+    SepList1<MonoType, "->"> => TypeSchema::Monotype(Type::from(<>)),
     <v: TypeQuantifier> <t: TypeSchema> =>
         TypeSchema::Polytype {
             variable: v,
@@ -104,134 +119,25 @@ TypeSchema: TypeSchema = {
         }
 };
 
-AOP: AssignOp = {
-    Equal => AssignOp::Equal,
-    Tilde => AssignOp::Tilde
+Stmt: Stmt = {
+    Item             => Stmt::Item(<>),
+    <Expr> "newline" => Stmt::Expr(<>),
 };
 
-Instr: Instr = {
-    <DName>           => Instr::Let(<>),
-    <Expr>   Newline  => Instr::Compute(<>),
-    Ellipsis Newline  => Instr::Ellipsis, 
-    Break    Newline  => Instr::Break,
-    <Bind>,
-    <Assign>,
-    NL<Loop> <b: Block> NL<End> => Instr::Loop { body: b },
-    // TODO: reintroduce `while` as a macro.
-    // It was removed because it causing ambiguity with do ... end
-    // blocks; the parser couldn't tell if the block is something
-    // to execute or apply to a left function.
-    // Being able to write `|x| x` and `|x| do x end` is more
-    // important than having builtin while loops for me, and they
-    // just compile to loop ... end blocks anyway!
-    // NL<While> <c: Expr> NL<Do> <mut b: Block> NL<End> => {
-    //     b.insert(0, Instr::Compute(Expr::Branch {
-    //         paths: vec![
-    //             (c,                vec![Instr::Ellipsis]),
-    //             (Expr::Bool(true), vec![Instr::Break])
-    //         ]
-    //     }));
-    //     Instr::Loop { body: b }
-    // },
-};
-
-Block: Vec<Instr> = {
-    <Expr> => vec![Instr::Compute(<>)],
-    <Instr+>
-};
-
-Intrinsic: Expr = {
-    At <n: Name> <es: NApply*>
-    => Expr::Intrinsic { name: n, args: es }
-};
-
-Bind: Instr = {
-    Var <n: Name> <a: NL<Ann>?> <op: NL<AOP>> <e: Expr> Newline
-    => Instr::Var {name: n, ann: a, op, expr: e}
-};
-
-Assign: Instr = {
-    <n: Name> <op: AOP> <e: Expr> Newline
-    => Instr::Assign {name: n, op, expr: e}
-};
-
-Branch: Expr = {
-    If <e: Expr> NL<Then> <b1: Block> 
-    <b2: (NL<Elif> <Expr> NL<Then> <Block>)*> 
-    <b3: (NL<Else> <Block>)?> End
-    => { 
-        let b3 = match b3 {
-            // If the user doesn't provide an else clause
-            // we insert one with a `()` expression which
-            // forces the entire expression to have type Void.
-            None    => vec![Instr::Compute(Expr::Void)],
-            Some(v) => v
-        };
-        let mut paths = vec![(e, b1)];
-        paths.extend(b2.into_iter());
-        paths.push((Expr::Bool(true), b3));
-        Expr::Branch { paths }
-    }
-};
-
-Expr : Expr = {
+Expr: Expr = {
     Infix,
     // TODO: See if we can remove the necessary () around |x| do .. end
     // functions by having two seperate terminals, one for "single-line"
     // lambdas and another do "multi-line" lambdas.
-    Func,
+    Lambda,
+    Assign,
 };
 
-Infix: Expr = {
-    NInfix,
-    <l: Infix> <op: OP> <r: NInfix> => Expr::Apply {
-        left: Box::new(Expr::Apply { 
-            left:  Box::new(Expr::Name(op)),
-            right: Box::new(l)
-        }),
-        right: Box::new(r)
-    },
-    Intrinsic,
-}
-
-NInfix: Expr = {
-    NApply,
-    Apply,
-};
-
-// Not a function application
-NApply: Expr = {
-    LParen RParen  => Expr::Void,
-    <Boolean>      => Expr::Bool(<>),
-    <I64>          => Expr::Int(<>),
-    <Name>         => Expr::Name(<>),
-    <Str>          => Expr::Str(<>),
-    <Char>         => Expr::Char(<>),
-    List,
-    Array,
-    Branch,
-    NL<Do> <Block> End => Expr::Block { body: <> },
-    LParen <Expr> RParen,
-};
-
-Apply: Expr = {
-    <l: Apply>  <r: NApply>  => Expr::Apply { left: Box::new(l), right: Box::new(r) },
-    <l: NApply> <r: NApply> => Expr::Apply { left: Box::new(l), right: Box::new(r) },
-};
-
-List: Expr = {
-    NL<LSBrack> <v: SepList<Expr, NL<Comma>>> RSBrack => Expr::List(v)
-}
-
-Array: Expr = {
-    Hash NL<LSBrack> <v: SepList<Expr, NL<Comma>>> RSBrack => Expr::Array(v)
-}
-
-Func: Expr = {
-    Pipe <ps: Name+> NL<Pipe> <e: Expr> => {
+Lambda: Expr = {
+    "|" <ps: Name+> NL<"|"> <e: Expr> => {
         let mut lambda = e;
         for param in ps.into_iter().rev() {
-            lambda = Expr::Func { 
+            lambda = Expr::Lambda {
                 param,
                 expr: Box::new(lambda),
             };
@@ -240,30 +146,136 @@ Func: Expr = {
     }
 };
 
-I64: i64 = <"Int"> => match <> {
-    Tok::IntLiteral(i)  => i,
-    _ => unreachable!()
+Infix: Expr = {
+    NInfix,
+    <l: Infix> <op: Operator> <r: NInfix> => Expr::Apply {
+        left: Box::new(Expr::Apply { 
+            left: Box::new(Expr::Name(op)),
+            right: Box::new(l)
+        }),
+        right: Box::new(r)
+    },
 };
 
-Char: char = <"Char"> => match <> {
-    Tok::CharLiteral(c)  => c,
-    _ => unreachable!()
+NInfix: Expr = {
+    Apply,
+    NApply,
+};
+ 
+NApply: Expr = {
+    Ellipsis,
+    Void,
+    Int,
+    Bool,
+    Char,
+    List,
+    Str,
+    Ident,
+    Branch,
+    Field,
+    DoBlock,
+    "(" <Expr> ")",
 };
 
-Boolean: bool = {
-    True  => true,
-    False => false
+Ellipsis: Expr = {
+    "..." => Expr::Ellipsis
 };
 
+Void: Expr = {
+    "(" ")" => Expr::Void
+};
+
+Int: Expr = {
+    "Int" => match <> {
+        Tok::IntLiteral(i)  => Expr::Int(i),
+        _ => unreachable!()
+    }
+};
+
+Bool: Expr = {
+    "true" => Expr::Bool(true),
+    "false" => Expr::Bool(false)
+};
+
+Char: Expr = {
+    "Char" => match <> {
+        Tok::CharLiteral(c)  => Expr::Char(c),
+        _ => unreachable!()
+    }
+};
+
+Str: Expr = {
+    "Str" => Expr::List(<>.chars()
+                          .map(|c| Expr::Char(c))
+                          .collect())
+};
+
+List: Expr = {
+    NL<"["> <v: SepList<Expr, NL<",">>> "]" => Expr::List(v)
+
+}
+
+Ident: Expr = {
+    Name => Expr::Name(<>)
+};
+
+Branch: Expr = {
+    "if" <e: Expr> NL<"then"> <b1: Block>
+    <b2: (NL<"elif"> <Expr> NL<"then"> <Block>)*>
+    <b3: (NL<"else"> <Block>)?> "end"
+    => { 
+        // FIXME: the parser should not arbitrarily insert AST nodes,
+        // this should ideally be moved much further down.
+        let b3 = match b3 {
+            // If the user doesn't provide an else clause
+            // we insert one with a `()` expression which
+            // forces the entire expression to have type Void.
+            None    => vec![Stmt::Expr(Expr::Void)],
+            Some(v) => v
+        };
+        let mut paths = vec![(e, b1)];
+        paths.extend(b2.into_iter());
+        paths.push((
+            Expr::Bool(true),
+            b3
+        ));
+        Expr::Branch { paths }
+    }
+};
+
+Block: Vec<Stmt> = {
+    Expr    => vec![Stmt::Expr(<>)],
+    <Stmt+>
+};
+
+DoBlock: Expr = {
+    NL<"do"> <Block> "end" => Expr::Block { body: <> }
+};
+
+Apply: Expr = {
+    <l: Apply>  <r: NApply> => Expr::Apply { left: Box::new(l), right: Box::new(r) },
+    <l: NApply> <r: NApply> => Expr::Apply { left: Box::new(l), right: Box::new(r) },
+};
+
+Field: Expr = {
+    <expr: NApply> "." <name: Name>
+        => Expr::Field { expr: Box::new(expr), name }
+};
+
+Assign: Expr = {
+    <left: Field> "=" <right: Expr>
+        => Expr::Assign { left: Box::new(left), right: Box::new(right) }
+};
+ 
 TypeName: String = <"TypeName"> => <>.to_string();
 Name:     String = {
     <"Name"> => <>.to_string(),
-    LParen <OP> RParen
+    "(" <Operator> ")"
 };
-OP:       String = <"OP">   => format!("({})", <>).to_string();
-Str:      String = <"Str">  => <>.to_string();
 
-NL<T>: T     = <T> Newline?;
+Operator:       String = <"Operator">   => format!("({})", <>).to_string();
+
+NL<T>: T     = <T> "newline"?;
 
 SepList<T, S>: Vec<T> = {
     <mut v: (<T> S)*> <e: NL<T>?> => match e {
@@ -290,60 +302,52 @@ extern {
     enum Tok<'input> {
         "Name"     => Tok::Name(<&'input str>),
         "TypeName" => Tok::TypeName(<&'input str>),
-        "OP"       => Tok::Operator(<&'input str>),
+        "Operator" => Tok::Operator(<&'input str>),
 
         "Int"      => Tok::IntLiteral(i64),
         "Str"      => Tok::StrLiteral(<&'input str>),
         "Char"     => Tok::CharLiteral(char),
 
-        Ellipsis   => Tok::Ellipsis,
+        "..."      => Tok::Ellipsis,
 
-        At         => Tok::At,
-        // TODO: remove this (?)
-        Excl       => Tok::Excl, 
-        Dot        => Tok::Dot,
+        "@"        => Tok::At,
+        "."        => Tok::Dot,
 
-        Let        => Tok::Let,
-        Do         => Tok::Do,
-        End        => Tok::End,
-        Var        => Tok::Var,
-        // TODO: replace type with data
-        Type       => Tok::Type, 
-        Macro      => Tok::Macro,
-        Import     => Tok::Import,
-        Forall     => Tok::Forall,
+        "mod"      => Tok::Mod,
+        "let"      => Tok::Let,
+        "do"       => Tok::Do,
+        "end"      => Tok::End,
+        "data"     => Tok::Data,
+        "forall"   => Tok::Forall,
 
-        // TODO: r eplace true/false with algebraic data-types
-        True       => Tok::True,
-        False      => Tok::False,
-        If         => Tok::If,
-        Then       => Tok::Then,
-        Elif       => Tok::Elif,
-        Else       => Tok::Else,
+        "true"     => Tok::True,
+        "false"    => Tok::False,
+        "if"       => Tok::If,
+        "then"     => Tok::Then,
+        "elif"     => Tok::Elif,
+        "else"     => Tok::Else,
 
-        Fn         => Tok::Fn, 
+        "loop"     => Tok::Loop,
+        "break"    => Tok::Break,
 
-        Loop       => Tok::Loop,
-        While      => Tok::While,
+        "..."      => Tok::Ellipsis,
+        ":"        => Tok::Colon,
+        "->"       => Tok::Arrow,
+        "|"        => Tok::Pipe,
+        "="        => Tok::Equal,
+        "~"        => Tok::Tilde,
+        "@"        => Tok::At,
+        "."        => Tok::Dot,
+        ","        => Tok::Comma,
+        "#"        => Tok::Hash,
 
-        Break      => Tok::Break,
+        "("        => Tok::LParen,
+        ")"        => Tok::RParen,
+        "{"        => Tok::LBrace,
+        "}"        => Tok::RBrace,
+        "["        => Tok::LBrack,
+        "]"        => Tok::RBrack,
 
-        Colon      => Tok::Colon,
-        Arrow      => Tok::Arrow,
-        DArrow     => Tok::DArrow,
-        Pipe       => Tok::Pipe,
-        Comma      => Tok::Comma,
-        Equal      => Tok::Equal,
-        Tilde      => Tok::Tilde,
-        Hash       => Tok::Hash,
-
-        LParen     => Tok::LParen,
-        RParen     => Tok::RParen,
-        LBrack     => Tok::LBrack,
-        RBrack     => Tok::RBrack,
-        LSBrack    => Tok::LSBrack,
-        RSBrack    => Tok::RSBrack,
-
-        Newline    => Tok::Newline
+        "newline"  => Tok::Newline
     }
 }

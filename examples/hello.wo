@@ -1,4 +1,0 @@
-let main ~ do
-    @dump "The answer to Life,"
-    @dump "The Universe and Everything: " 42
-end

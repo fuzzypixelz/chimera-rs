@@ -16,11 +16,11 @@ grammar<'input>(input: &'input str, type_builder: &mut HashMap<String, usize>);
 pub Program: Vec<Item> = Item*;
 
 Item: Item = {
-    <attrs: Attr*> <kind: ItemKind> => Item { attrs, kind }
+    <attr: Attr?> <kind: ItemKind> => Item { attr, kind }
 };
 
 Attr: Attr = {
-    At LBrack <name: Name> LParen <args: SepList<Expr, Comma>> RParen RBrack Newline
+    "@" "[" <name: Name> "(" <args: SepList<Name, ",">> ")" "]" "newline"
         => Attr { name, args }
 };
 
@@ -32,33 +32,33 @@ pub ItemKind: ItemKind = {
 };
 
 Definition: ItemKind = {
-    Let <name: Name> <ann: NL<Ann>?> NL<Equal> <expr: Expr> Newline
+    "let" <name: Name> <ann: NL<Ann>?> NL<"="> <expr: Expr> "newline"
         => ItemKind::Definition { name, ann, expr }
 };
 
 DataType: ItemKind = {
-    Data <schema: TypeSchema> Newline
-        <variants: SepList<Variant, NL<Comma>>>
-    NL<End> => {
+    "data" <schema: TypeSchema> "newline"
+        <variants: SepList<Variant, NL<",">>>
+    NL<"end"> => {
         type_builder.clear();
         ItemKind::DataType { schema, variants }
     }
 };
 
 Variant: (String, Vec<(String, TypeSchema)>) = {
-    <TypeName> NL<LBrace> 
-        <SepList<(<Name> Colon <TypeSchema>), NL<Comma>>>
-    RBrace
+    <TypeName> NL<"{">
+        <SepList<(<Name> ":" <TypeSchema>), NL<",">>>
+    "}"
 };
 
 Module: ItemKind = {
-    Mod <name: Name> Newline
+    "mod" <name: Name> "newline"
         <items: Item*> 
-    End => ItemKind::Module { name, items }
+    "end" => ItemKind::Module { name, items }
 };
 
 Ann: TypeSchema = {
-    Colon <TypeSchema> => {
+    ":" <TypeSchema> => {
         // The type_build should always be empty before we
         // start parsing a type annotation; it's empty when
         // first created so this is fully guaranteed.
@@ -68,14 +68,14 @@ Ann: TypeSchema = {
 };
 
 SimpleMonoType: Type = {
-    LParen <MonoType> RParen,
+    "(" <MonoType> ")",
     // NOTE: the convention is that type-variables are lower-case,
     // but constructor names start with an upper-case.
-    <v: Name> => { dbg!(&type_builder, &v); Type::Variable(
+    <v: Name> => Type::Variable(
         // FIXME: Figure out how to do proper error reporting
         // in the parser! (probably by passing in a mut data-type).
         *type_builder.get(&v).unwrap()
-    ) }
+    )
 }
 
 MonoType: Type = {
@@ -98,7 +98,7 @@ MonoType: Type = {
 TypeQuantifier: Variable = {
     // FIXME: we shouldn't force the poor programmers to type `forall`
     // everytime they need to do polymorphism, oh the horror!
-    Forall <v: Name> Dot => {
+    "forall" <v: Name> "." => {
         // The number of the `v` is picked as the maximum existing
         // type variable PLUS one. Otherwise we put in zero.
         let variable = match type_builder.values().max() {
@@ -111,7 +111,7 @@ TypeQuantifier: Variable = {
 }
 
 TypeSchema: TypeSchema = {
-    SepList1<MonoType, Arrow> => TypeSchema::Monotype(Type::from(<>)),
+    SepList1<MonoType, "->"> => TypeSchema::Monotype(Type::from(<>)),
     <v: TypeQuantifier> <t: TypeSchema> =>
         TypeSchema::Polytype {
             variable: v,
@@ -120,8 +120,8 @@ TypeSchema: TypeSchema = {
 };
 
 Stmt: Stmt = {
-    Item           => Stmt::Item(<>),
-    <Expr> Newline => Stmt::Expr(<>),
+    Item             => Stmt::Item(<>),
+    <Expr> "newline" => Stmt::Expr(<>),
 };
 
 Expr: Expr = {
@@ -134,7 +134,7 @@ Expr: Expr = {
 };
 
 Lambda: Expr = {
-    Pipe <ps: Name+> NL<Pipe> <e: Expr> => {
+    "|" <ps: Name+> NL<"|"> <e: Expr> => {
         let mut lambda = e;
         for param in ps.into_iter().rev() {
             lambda = Expr::Lambda {
@@ -148,7 +148,7 @@ Lambda: Expr = {
 
 Infix: Expr = {
     NInfix,
-    <l: Infix> <op: OP> <r: NInfix> => Expr::Apply {
+    <l: Infix> <op: Operator> <r: NInfix> => Expr::Apply {
         left: Box::new(Expr::Apply { 
             left: Box::new(Expr::Name(op)),
             right: Box::new(l)
@@ -163,20 +163,26 @@ NInfix: Expr = {
 };
  
 NApply: Expr = {
+    Ellipsis,
     Void,
     Int,
     Bool,
     Char,
+    List,
     Str,
     Ident,
     Branch,
     Field,
-    NL<Do> <Block> End => Expr::Block { body: <> },
-    LParen <Expr> RParen,
+    DoBlock,
+    "(" <Expr> ")",
+};
+
+Ellipsis: Expr = {
+    "..." => Expr::Ellipsis
 };
 
 Void: Expr = {
-    LParen RParen => Expr::Void
+    "(" ")" => Expr::Void
 };
 
 Int: Expr = {
@@ -187,8 +193,8 @@ Int: Expr = {
 };
 
 Bool: Expr = {
-    True  => Expr::Bool(true),
-    False => Expr::Bool(false)
+    "true" => Expr::Bool(true),
+    "false" => Expr::Bool(false)
 };
 
 Char: Expr = {
@@ -199,17 +205,24 @@ Char: Expr = {
 };
 
 Str: Expr = {
-    "Str" => Expr::Str(<>.to_string())
+    "Str" => Expr::List(<>.chars()
+                          .map(|c| Expr::Char(c))
+                          .collect())
 };
+
+List: Expr = {
+    NL<"["> <v: SepList<Expr, NL<",">>> "]" => Expr::List(v)
+
+}
 
 Ident: Expr = {
     Name => Expr::Name(<>)
 };
 
 Branch: Expr = {
-    If <e: Expr> NL<Then> <b1: Block> 
-    <b2: (NL<Elif> <Expr> NL<Then> <Block>)*> 
-    <b3: (NL<Else> <Block>)?> End
+    "if" <e: Expr> NL<"then"> <b1: Block>
+    <b2: (NL<"elif"> <Expr> NL<"then"> <Block>)*>
+    <b3: (NL<"else"> <Block>)?> "end"
     => { 
         // FIXME: the parser should not arbitrarily insert AST nodes,
         // this should ideally be moved much further down.
@@ -235,38 +248,34 @@ Block: Vec<Stmt> = {
     <Stmt+>
 };
 
+DoBlock: Expr = {
+    NL<"do"> <Block> "end" => Expr::Block { body: <> }
+};
+
 Apply: Expr = {
     <l: Apply>  <r: NApply> => Expr::Apply { left: Box::new(l), right: Box::new(r) },
     <l: NApply> <r: NApply> => Expr::Apply { left: Box::new(l), right: Box::new(r) },
 };
 
 Field: Expr = {
-    <expr: NApply> Dot <name: Name>
+    <expr: NApply> "." <name: Name>
         => Expr::Field { expr: Box::new(expr), name }
 };
 
 Assign: Expr = {
-    <left: Field> Equal <right: Expr>
+    <left: Field> "=" <right: Expr>
         => Expr::Assign { left: Box::new(left), right: Box::new(right) }
 };
  
-// List: Expr = {
-//     NL<LBrack> <v: SepList<Expr, NL<Comma>>> RBrack => Expr::List(v)
-// };
-
-// Array: Expr = {
-//     Hash NL<LBrack> <v: SepList<Expr, NL<Comma>>> RBrack => Expr::Array(v)
-// };
-
 TypeName: String = <"TypeName"> => <>.to_string();
 Name:     String = {
     <"Name"> => <>.to_string(),
-    LParen <OP> RParen
+    "(" <Operator> ")"
 };
 
-OP:       String = <"OP">   => format!("({})", <>).to_string();
+Operator:       String = <"Operator">   => format!("({})", <>).to_string();
 
-NL<T>: T     = <T> Newline?;
+NL<T>: T     = <T> "newline"?;
 
 SepList<T, S>: Vec<T> = {
     <mut v: (<T> S)*> <e: NL<T>?> => match e {
@@ -293,61 +302,52 @@ extern {
     enum Tok<'input> {
         "Name"     => Tok::Name(<&'input str>),
         "TypeName" => Tok::TypeName(<&'input str>),
-        "OP"       => Tok::Operator(<&'input str>),
+        "Operator" => Tok::Operator(<&'input str>),
 
         "Int"      => Tok::IntLiteral(i64),
         "Str"      => Tok::StrLiteral(<&'input str>),
         "Char"     => Tok::CharLiteral(char),
 
-        Ellipsis   => Tok::Ellipsis,
+        "..."      => Tok::Ellipsis,
 
-        At         => Tok::At,
-        // TODO: remove this (?)
-        Excl       => Tok::Excl, 
-        Dot        => Tok::Dot,
+        "@"        => Tok::At,
+        "."        => Tok::Dot,
 
-        Mod        => Tok::Mod,
-        Let        => Tok::Let,
-        Do         => Tok::Do,
-        End        => Tok::End,
-        Var        => Tok::Var,
-        // TODO: replace type with data
-        Data       => Tok::Data, 
-        Macro      => Tok::Macro,
-        Import     => Tok::Import,
-        Forall     => Tok::Forall,
+        "mod"      => Tok::Mod,
+        "let"      => Tok::Let,
+        "do"       => Tok::Do,
+        "end"      => Tok::End,
+        "data"     => Tok::Data,
+        "forall"   => Tok::Forall,
 
-        // TODO: r eplace true/false with algebraic data-types
-        True       => Tok::True,
-        False      => Tok::False,
-        If         => Tok::If,
-        Then       => Tok::Then,
-        Elif       => Tok::Elif,
-        Else       => Tok::Else,
+        "true"     => Tok::True,
+        "false"    => Tok::False,
+        "if"       => Tok::If,
+        "then"     => Tok::Then,
+        "elif"     => Tok::Elif,
+        "else"     => Tok::Else,
 
-        Fn         => Tok::Fn, 
+        "loop"     => Tok::Loop,
+        "break"    => Tok::Break,
 
-        Loop       => Tok::Loop,
-        While      => Tok::While,
+        "..."      => Tok::Ellipsis,
+        ":"        => Tok::Colon,
+        "->"       => Tok::Arrow,
+        "|"        => Tok::Pipe,
+        "="        => Tok::Equal,
+        "~"        => Tok::Tilde,
+        "@"        => Tok::At,
+        "."        => Tok::Dot,
+        ","        => Tok::Comma,
+        "#"        => Tok::Hash,
 
-        Break      => Tok::Break,
+        "("        => Tok::LParen,
+        ")"        => Tok::RParen,
+        "{"        => Tok::LBrace,
+        "}"        => Tok::RBrace,
+        "["        => Tok::LBrack,
+        "]"        => Tok::RBrack,
 
-        Colon      => Tok::Colon,
-        Arrow      => Tok::Arrow,
-        DArrow     => Tok::DArrow,
-        Pipe       => Tok::Pipe,
-        Comma      => Tok::Comma,
-        Equal      => Tok::Equal,
-        Tilde      => Tok::Tilde,
-        Hash       => Tok::Hash,
-
-        LParen     => Tok::LParen,
-        RParen     => Tok::RParen,
-        LBrace     => Tok::LBrace,
-        RBrace     => Tok::RBrace,
-        LBrack     => Tok::LBrack,
-        RBrack     => Tok::RBrack,
-
-        Newline    => Tok::Newline
+        "newline"  => Tok::Newline
     }
 }

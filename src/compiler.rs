@@ -1,22 +1,23 @@
-use crate::ast::{DName, Expr, Instr};
-use crate::code::{Code, CompiledCode, Env};
-use crate::value::{List, Value};
 use std::cell::RefCell;
-use std::io::{self, Read};
+// use std::io::{self, Read};
 use std::rc::Rc;
+
+use crate::ast::{Expr, Item, ItemKind, Stmt};
+use crate::attribute::intrinsic;
+use crate::code::{Code, CompiledCode, Env};
+use crate::value::Value;
 
 impl Code for Expr {
     fn compile(self) -> CompiledCode {
         match self {
+            Expr::Ellipsis => CompiledCode::new(move |_env, _cont| Value::Void.into()),
             Expr::Void => CompiledCode::new(move |_env, _cont| Value::Void.into()),
             Expr::Int(int) => CompiledCode::new(move |_env, _cont| Value::Int(int).into()),
             Expr::Bool(boolean) => {
                 CompiledCode::new(move |_env, _cont| Value::Bool(boolean).into())
             }
-            Expr::Str(string) => {
-                CompiledCode::new(move |_env, _cont| Value::Str(string.clone()).into())
-            }
             Expr::Char(ch) => CompiledCode::new(move |_env, _cont| Value::Char(ch).into()),
+            Expr::Name(name) => CompiledCode::new(move |env, _cont| Env::get_name(env, &name)),
             Expr::List(list) => {
                 let compiled_list = list.into_iter().map(Code::compile).collect::<Vec<_>>();
                 CompiledCode::new(move |env, cont| {
@@ -29,18 +30,6 @@ impl Code for Expr {
                     })))
                 })
             }
-            Expr::Array(array) => {
-                let compiled_array = array.into_iter().map(Code::compile).collect::<Vec<_>>();
-                CompiledCode::new(move |env, cont| {
-                    Rc::new(RefCell::new(Value::Array({
-                        compiled_array
-                            .iter()
-                            .map(|i| i.execute(env.clone(), cont.clone()))
-                            .collect::<Vec<_>>()
-                    })))
-                })
-            }
-            Expr::Name(name) => CompiledCode::new(move |env, _cont| Env::get_name(env, &name)),
             Expr::Block { mut body } => {
                 // NOTE: the parser should've already ensured
                 // the body is not empty, so unwrap away!
@@ -85,10 +74,10 @@ impl Code for Expr {
                     result
                 })
             }
-            Expr::Func { param, expr } => {
+            Expr::Lambda { param, expr } => {
                 let compiled_body = Rc::new(expr.compile());
                 CompiledCode::new(move |env, _cont| {
-                    Value::Func {
+                    Value::Lambda {
                         param: param.clone(),
                         // The function's body is compiled the first time we come
                         // accross its expression, then its expression itself
@@ -104,14 +93,14 @@ impl Code for Expr {
                         // capturing the current Env for future reference.
                         closure: env,
                     }
-                    .into()
+                        .into()
                 })
             }
             Expr::Apply { left, right } => {
                 let compiled_func = left.compile();
                 let compiled_input = right.compile();
                 CompiledCode::new(move |env, cont| {
-                    if let Value::Func {
+                    if let Value::Lambda {
                         param,
                         body,
                         closure,

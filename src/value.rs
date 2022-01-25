@@ -1,7 +1,8 @@
-use crate::code::{CompiledCode, WoEnv};
 use std::cell::RefCell;
 use std::fmt::Display;
 use std::rc::Rc;
+
+use crate::code::{CompiledCode, WoEnv};
 
 pub type WoValue = Rc<RefCell<Value>>;
 
@@ -11,10 +12,8 @@ pub enum Value {
     Int(i64),
     Bool(bool),
     Char(char),
-    Str(String),
     List(List),
-    Array(Vec<WoValue>),
-    Func {
+    Lambda {
         param: String,
         body: Rc<CompiledCode>,
         closure: WoEnv,
@@ -43,7 +42,7 @@ impl PartialEq for CompiledCode {
 
 /// The representation of a "Cons List" within the interpreter,
 /// as the language isn't mature enough to have custom data types yet.
-/// This is a temporary way of having aggregate data types in Woland.
+/// This is a temporary way of having aggregate data types in Chimera.
 #[derive(Debug, Clone, PartialEq)]
 pub enum List {
     Cons(WoValue, Box<List>),
@@ -85,18 +84,9 @@ impl Display for Value {
             Value::Void => write!(f, "()"),
             Value::Int(i) => write!(f, "{}", i),
             Value::Bool(b) => write!(f, "{}", b),
-            Value::Str(s) => write!(f, "{}", s),
-            Value::Char(c) => write!(f, "'{}'", c),
+            Value::Char(c) => write!(f, "{}", c),
             Value::List(l) => write!(f, "[{}]", l),
-            Value::Array(a) => write!(
-                f,
-                "#[{}]",
-                a.iter()
-                    .map(|v| v.borrow().to_string())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            ),
-            Value::Func { .. } => write!(f, "{:#?}", self),
+            Value::Lambda { .. } => write!(f, "{:#?}", self),
         }
     }
 }

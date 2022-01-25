@@ -85,7 +85,7 @@ impl Display for Value {
             Value::Int(i) => write!(f, "{}", i),
             Value::Bool(b) => write!(f, "{}", b),
             Value::Char(c) => write!(f, "{}", c),
-            Value::List(l) => write!(f, "[{}]", l),
+            Value::List(l) => write!(f, "{}", l),
             Value::Lambda { .. } => write!(f, "{:#?}", self),
         }
     }
@@ -100,7 +100,7 @@ impl Display for List {
                 .iter()
                 .map(|v| v.borrow().to_string())
                 .collect::<Vec<_>>()
-                .join(", ")
+                .join("")
         )
     }
 }

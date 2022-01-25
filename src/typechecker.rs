@@ -1,8 +1,10 @@
-use crate::ast::{Expr, Item, Stmt};
-use crate::error::TypeError;
-use anyhow::Result;
-use polytype::{tp, Context, Infer, Type, TypeSchema};
 use std::{cell::RefCell, collections::HashMap};
+
+use anyhow::Result;
+use polytype::{Context, Infer, tp, Type, TypeSchema};
+
+use crate::ast::{Expr, Item, ItemKind, Stmt};
+use crate::error::TypeError;
 
 #[derive(Default, Clone)]
 pub struct Lexicon<'a> {
@@ -29,22 +31,21 @@ impl<'a> Infer<Lexicon<'a>, TypeError> for Expr {
     // ones that make up a lambda calculus are Name, Apply, Func and Let;
     // the program can be thought of as a sequence of the last case:
     // `let name0 = expr0 in let name1 = expr1 in ... let nameN = exprN in ()`.
-    // This means that Woland's Let-syntax is different from the polymorphic
+    // This means that Chimera's Let-syntax is different from the polymorphic
     // lambda calculus' Let-polymorphism, but is still equivalent to it.
     fn infer(&self, lexicon: &Lexicon<'a>) -> Result<Type, TypeError> {
-        match self {
+        match &self {
             // Boring hard-coded primitive types, nothing to see here!
             Expr::Void => Ok(tp!(Void)),
             Expr::Int(_) => Ok(tp!(Int)),
             Expr::Bool(_) => Ok(tp!(Bool)),
             Expr::Char(_) => Ok(tp!(Char)),
-            Expr::Str(_) => Ok(tp!(Str)),
             // This corresponds to the [VAR] rule:
             // We check the lexicon for an assumption about `name` which gives us
             // a polytype `ts`, otherwise the algorithm fails.
             // We then specialize `ts` to a monotype `t` by replacing the bounded type
             // variables by fresh new ones; `t` is then the type of `name`.
-            Expr::Name(name) => lexicon.get(name),
+            Expr::Name(name) => lexicon.get(&name),
             // This corresponds to the [APP] rule:
             // Only this rule forces refinement of the type variables introduced.
             // We recursively call J to infer the type of `left` and `right`,
@@ -124,13 +125,13 @@ impl<'a> Lexicon<'a> {
     }
 
     pub fn check(&self, item: &Item) -> Result<(), TypeError> {
-        match item {
-            Item::Module { items, .. } => {
+        match &item.kind {
+            ItemKind::Module { items, .. } => {
                 for item in items {
                     self.check(item)?;
                 }
             }
-            Item::Definition { name, ann, expr } => {
+            ItemKind::Definition { name, ann, expr } => {
                 if let Some(ts) = ann {
                     // We introduce type annotations into the algorithm
                     // without any checks, as if it it infered them itself.
@@ -162,7 +163,7 @@ impl<'a> Lexicon<'a> {
             _ => unimplemented!("the item {:?} is not type-checked!", item),
         }
         for (name, ts) in self.assumptions.borrow().iter() {
-            println!("{} : {}", name, ts)
+            println!("[@typechecker] {} : {}", name, ts)
         }
         Ok(())
     }
@@ -177,10 +178,13 @@ mod tests {
         let lexicon = Lexicon::default();
         let block = Expr::Block {
             body: vec![
-                Stmt::Item(Item::Definition {
-                    name: "answer".to_string(),
-                    ann: None,
-                    expr: Expr::Int(42),
+                Stmt::Item(Item {
+                    kind: ItemKind::Definition {
+                        name: "answer".to_string(),
+                        ann: None,
+                        expr: Expr::Int(42),
+                    },
+                    attrs: vec![],
                 }),
                 Stmt::Expr(Expr::Name("answer".to_string())),
             ],
@@ -192,10 +196,13 @@ mod tests {
     fn block_implicit_return() {
         let lexicon = Lexicon::default();
         let block = Expr::Block {
-            body: vec![Stmt::Item(Item::Definition {
-                name: "chimera".to_string(),
-                ann: None,
-                expr: Expr::Str("monstrous fire-breathing hybrid creature".to_string()),
+            body: vec![Stmt::Item(Item {
+                kind: ItemKind::Definition {
+                    name: "chimera".to_string(),
+                    ann: None,
+                    expr: Expr::Str("monstrous fire-breathing hybrid creature".to_string()),
+                },
+                attrs: vec![],
             })],
         };
         assert_eq!(block.infer(&lexicon), Ok(tp!(Void)));
@@ -206,19 +213,25 @@ mod tests {
         let lexicon = Lexicon::default();
         let block = Expr::Block {
             body: vec![
-                Stmt::Item(Item::Definition {
-                    name: "shadowed".to_string(),
-                    ann: None,
-                    expr: Expr::Bool(true),
+                Stmt::Item(Item {
+                    kind: ItemKind::Definition {
+                        name: "shadowed".to_string(),
+                        ann: None,
+                        expr: Expr::Bool(true),
+                    },
+                    attrs: vec![],
                 }),
                 Stmt::Expr(Expr::Block {
                     body: vec![
-                        Stmt::Item(Item::Definition {
-                            name: "shadowed".to_string(),
-                            ann: None,
-                            expr: Expr::Bool(true),
+                        Stmt::Item(Item {
+                            kind: ItemKind::Definition {
+                                name: "shadowed".to_string(),
+                                ann: None,
+                                expr: Expr::Int(0),
+                            },
+                            attrs: vec![],
                         }),
-                        Stmt::Expr(Expr::Int(1)),
+                        Stmt::Expr(Expr::Name("shadowed".to_string())),
                     ],
                 }),
             ],

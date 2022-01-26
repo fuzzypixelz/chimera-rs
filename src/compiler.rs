@@ -10,21 +10,19 @@ use crate::value::Value;
 impl Code for Expr {
     fn compile(self) -> CompiledCode {
         match self {
-            Expr::Ellipsis => CompiledCode::new(move |_env, _cont| Value::Void.into()),
-            Expr::Void => CompiledCode::new(move |_env, _cont| Value::Void.into()),
-            Expr::Int(int) => CompiledCode::new(move |_env, _cont| Value::Int(int).into()),
-            Expr::Bool(boolean) => {
-                CompiledCode::new(move |_env, _cont| Value::Bool(boolean).into())
-            }
-            Expr::Char(ch) => CompiledCode::new(move |_env, _cont| Value::Char(ch).into()),
-            Expr::Name(name) => CompiledCode::new(move |env, _cont| Env::get_name(env, &name)),
+            Expr::Ellipsis => CompiledCode::new(move |_env| Value::Void.into()),
+            Expr::Void => CompiledCode::new(move |_env| Value::Void.into()),
+            Expr::Int(int) => CompiledCode::new(move |_env| Value::Int(int).into()),
+            Expr::Bool(boolean) => CompiledCode::new(move |_env| Value::Bool(boolean).into()),
+            Expr::Char(ch) => CompiledCode::new(move |_env| Value::Char(ch).into()),
+            Expr::Name(name) => CompiledCode::new(move |env| Env::get_name(env, &name)),
             Expr::List(list) => {
                 let compiled_list = list.into_iter().map(Code::compile).collect::<Vec<_>>();
-                CompiledCode::new(move |env, cont| {
+                CompiledCode::new(move |env| {
                     Rc::new(RefCell::new(Value::List({
                         compiled_list
                             .iter()
-                            .map(|i| i.execute(env.clone(), cont.clone()))
+                            .map(|i| i.execute(env.clone()))
                             .collect::<Vec<_>>()
                             .into()
                     })))
@@ -36,11 +34,11 @@ impl Code for Expr {
                 let last = body.pop().unwrap();
                 let compiled_block = body.into_iter().map(Code::compile).collect::<Vec<_>>();
                 let compiled_expr = last.compile();
-                CompiledCode::new(move |env, cont| {
+                CompiledCode::new(move |env| {
                     for instr in compiled_block.iter() {
-                        instr.execute(env.clone(), cont.clone());
+                        instr.execute(env.clone());
                     }
-                    compiled_expr.execute(env, cont)
+                    compiled_expr.execute(env)
                 })
             }
             Expr::Branch { paths } => {
@@ -53,18 +51,18 @@ impl Code for Expr {
                         )
                     })
                     .collect::<Vec<_>>();
-                CompiledCode::new(move |env, cont| {
+                CompiledCode::new(move |env| {
                     let mut result = Value::Void.into();
                     for p in &compiled_branch {
                         // FIXME: it's not very clear that p.0 is the condition and
                         // p.1 the corresponding code.
-                        if let Value::Bool(b) = *p.0.execute(env.clone(), cont.clone()).borrow() {
+                        if let Value::Bool(b) = *p.0.execute(env.clone()).borrow() {
                             if b {
                                 let (last, init) = p.1.split_last().unwrap();
                                 for i in init {
-                                    i.execute(env.clone(), cont.clone());
+                                    i.execute(env.clone());
                                 }
-                                result = last.execute(env, cont);
+                                result = last.execute(env);
                                 break;
                             }
                         } else {
@@ -76,7 +74,7 @@ impl Code for Expr {
             }
             Expr::Lambda { param, expr } => {
                 let compiled_body = Rc::new(expr.compile());
-                CompiledCode::new(move |env, _cont| {
+                CompiledCode::new(move |env| {
                     Value::Lambda {
                         param: param.clone(),
                         // The function's body is compiled the first time we come
@@ -93,19 +91,19 @@ impl Code for Expr {
                         // capturing the current Env for future reference.
                         closure: env,
                     }
-                        .into()
+                    .into()
                 })
             }
             Expr::Apply { left, right } => {
                 let compiled_func = left.compile();
                 let compiled_input = right.compile();
-                CompiledCode::new(move |env, cont| {
+                CompiledCode::new(move |env| {
                     if let Value::Lambda {
                         param,
                         body,
                         closure,
                         ..
-                    } = &*compiled_func.execute(env.clone(), cont.clone()).borrow()
+                    } = &*compiled_func.execute(env.clone()).borrow()
                     {
                         // Evaluating a function-block needs a separate Env
                         // The current env is only needed for resolving the parameter,
@@ -115,12 +113,12 @@ impl Code for Expr {
                         // of the Function expression. This might by the Env of another
                         // function application or a block expression.
                         let fenv = Rc::new(RefCell::new(Env::default()));
-                        let input_value = compiled_input.execute(env, cont.clone());
+                        let input_value = compiled_input.execute(env);
                         fenv.borrow_mut()
                             .names
                             .insert(param.to_string(), input_value);
                         fenv.borrow_mut().outer = Some(closure.clone());
-                        body.execute(fenv, cont)
+                        body.execute(fenv)
                     } else {
                         // TODO: switch all unreachable!'s to the unreachable
                         // intrinsic for more optimization (?)
@@ -140,11 +138,11 @@ impl Code for Stmt {
                 let compiled_expr = expr.compile();
                 // The evaluated expression may or may not have
                 // any side-effects. Beware!
-                CompiledCode::new(move |env, cont| compiled_expr.execute(env, cont))
+                CompiledCode::new(move |env| compiled_expr.execute(env))
             }
             Stmt::Item(item) => {
                 let compiled_item = item.compile();
-                CompiledCode::new(move |env, cont| compiled_item.execute(env, cont))
+                CompiledCode::new(move |env| compiled_item.execute(env))
             }
         }
     }
@@ -156,23 +154,25 @@ impl Code for Item {
             ItemKind::Definition { name, expr, .. } => {
                 let compiled_expr = expr.compile();
                 match self.attr {
-                    None => CompiledCode::new(move |env, cont| {
-                        let rhs_value = compiled_expr.execute(env.clone(), cont);
+                    None => CompiledCode::new(move |env| {
+                        let rhs_value = compiled_expr.execute(env.clone());
                         env.borrow_mut().names.insert(name.to_string(), rhs_value);
                         Value::Void.into()
                     }),
-                    Some(attr) => if attr.name == "intrinsic" {
-                        CompiledCode::new(move |env, _cont| {
-                            let rhs_value = intrinsic(&attr.args[0]).into();
-                            env.borrow_mut().names.insert(name.to_string(), rhs_value);
-                            Value::Void.into()
-                        })
-                    } else {
-                        panic!("chimera: unknown attribute {}", attr.name)
+                    Some(attr) => {
+                        if attr.name == "intrinsic" {
+                            CompiledCode::new(move |env| {
+                                let rhs_value = intrinsic(&attr.args[0]).into();
+                                env.borrow_mut().names.insert(name.to_string(), rhs_value);
+                                Value::Void.into()
+                            })
+                        } else {
+                            panic!("chimera: unknown attribute {}", attr.name)
+                        }
                     }
                 }
             }
-            _ => unimplemented!("item {self:#?} is not evaluated!")
+            _ => unimplemented!("item {self:#?} is not evaluated!"),
         }
     }
 }

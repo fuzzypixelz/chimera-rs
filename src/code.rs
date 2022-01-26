@@ -26,21 +26,21 @@ pub trait Code {
 // FIXME: This is a bad model of `Code` as Instr's are not supposed
 // to have values nor types, it would make more sense to return am
 // optional WoValue, but would it cause more overhead to check it?
-pub struct CompiledCode(Box<dyn Fn(WoEnv, WoCont) -> WoValue>);
+pub struct CompiledCode(Box<dyn Fn(WoEnv) -> WoValue>);
 
 impl CompiledCode {
-    pub fn new(closure: impl 'static + Fn(WoEnv, WoCont) -> WoValue) -> Self {
+    pub fn new(closure: impl 'static + Fn(WoEnv) -> WoValue) -> Self {
         Self(Box::new(closure))
     }
 
-    pub fn execute(&self, env: WoEnv, cont: WoCont) -> WoValue {
-        self.0(env, cont)
+    pub fn execute(&self, env: WoEnv) -> WoValue {
+        self.0(env)
     }
 }
 
 impl Default for CompiledCode {
     fn default() -> Self {
-        CompiledCode::new(|_env, _cont| WoValue::default())
+        CompiledCode::new(|_env| WoValue::default())
     }
 }
 
@@ -48,21 +48,6 @@ impl std::fmt::Debug for CompiledCode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // Cannot debug-print closures.
         write!(f, "[CompiledCode]")
-    }
-}
-
-pub type WoCont = Rc<RefCell<Cont>>;
-
-// A "Continuation" i.e the evaluator's state.
-#[derive(Clone)]
-pub struct Cont {
-    /// Keeps track of the number of nested loops.
-    pub loops: u64,
-}
-
-impl Cont {
-    pub fn default() -> Self {
-        Self { loops: 0 }
     }
 }
 

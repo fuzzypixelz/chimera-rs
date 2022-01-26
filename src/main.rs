@@ -1,27 +1,27 @@
 #[macro_use]
 extern crate lalrpop_util;
 
-use std::{env, fs};
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::{env, fs};
 
 use anyhow::{Context, Result};
 
 use parser::parse;
 
-use crate::code::{Code, Cont, Env};
+use crate::code::{Code, Env};
 
 // use crate::typechecker::Lexicon;
 
 mod ast;
+mod attribute;
 mod code;
+mod compiler;
 mod error;
 mod lexer;
 mod parser;
 mod typechecker;
 mod value;
-mod compiler;
-mod attribute;
 
 lalrpop_mod!(#[allow(clippy::all)] pub grammar);
 
@@ -58,10 +58,8 @@ fn main() -> Result<()> {
     // }
 
     let env = Rc::new(RefCell::new(Env::default()));
-    let cont = Rc::new(RefCell::new(Cont::default()));
     for item in program {
-        item.compile()
-            .execute(env.clone(), cont.clone());
+        item.compile().execute(env.clone());
     }
     Ok(())
 }

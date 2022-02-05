@@ -36,26 +36,26 @@ lalrpop_mod!(#[allow(clippy::all)] pub grammar);
 */
 
 fn main() -> Result<()> {
-    let filename = env::args()
-        .nth(1)
-        .with_context(|| "no source file was specified")?;
+    let mut program = Vec::new();
+    for filename in env::args().skip(1) {
+        let source = fs::read_to_string(&filename).with_context(|| {
+            format!(
+                "error reading source file `{}`, you are on your own.",
+                filename
+            )
+        })?;
+        let items = parse(&source)
+            .with_context(|| format!("error while parsing source file `{}`", filename))?;
 
-    let source = fs::read_to_string(&filename).with_context(|| {
-        format!(
-            "error reading source file `{}`, you are on your own.",
-            filename
-        )
-    })?;
+        // let lexicon = Lexicon::default();
+        // for item in &items {
+        //     lexicon
+        //         .check(item)
+        //         .with_context(|| format!("encountered a type error in source file `{}`", filename))?;
+        // }
 
-    let program = parse(&source)
-        .with_context(|| format!("error while parsing source file `{}`", filename))?;
-
-    // let lexicon = Lexicon::default();
-    // for item in &program {
-    //     lexicon
-    //         .check(item)
-    //         .with_context(|| format!("encountered a type error in source file `{}`", filename))?;
-    // }
+        program.extend(items);
+    }
 
     let env = Rc::new(RefCell::new(Env::default()));
     for item in program {

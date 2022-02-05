@@ -59,6 +59,10 @@ let (&&) = |x y| if x then y else false end
 --: a -> a -> Bool
 let (!=) = |x y| not (x == y)
 
+@[intrinsic(read)]
+let read : Void -> Str
+    = ...
+
 @[intrinsic(print)]
 let print : forall a. a -> Void
     = ...
@@ -128,8 +132,11 @@ end
 
 --: (a -> b) -> [a] -> [b]
 let map = |f xs| do
-    let g = |x acc| f x :: acc
-    foldr g [] xs
+    if xs == [] then
+        []
+    else
+        f (head xs) :: map f (tail xs)
+    end
 end
 
 --: (a -> Bool) -> [a] -> [a]
@@ -173,7 +180,9 @@ let any = |p xs| foldr (|x acc| p x || acc) false xs
 let all = |p xs| foldr (|x acc| p x && acc) true xs
 
 let drop = |n xs| do
-    if n == 0 then
+    if xs == [] then
+        []
+    elif n == 0 then
         xs
     else
         drop (n - 1) (tail xs)
@@ -210,6 +219,23 @@ let (..) = |s e| do
     end
 end
 
+let zip_with = |f xs ys| do
+    if (xs == []) || (ys == []) then
+        []
+    else
+        let z = f (head xs) (head ys)
+        z :: zip_with f (tail xs) (tail ys)
+    end
+end
+
+let (!!) = |xs n| do
+    if n == 0 then
+        head xs
+    else
+        tail xs !! n - 1
+    end
+end
+
 let tests = do
     map ((+) 1) [1, 2, 3] ?= [2, 3, 4]
 
@@ -239,4 +265,7 @@ let tests = do
     all ((==) 3) [1, 2, 3] ?= false
 
     take 3 (1..10) ^ drop 3 (1..10) ?= (1..10)
+
+    -- [1, 2, 3] !! 0 ?= 1
+    -- [1, 2, 3] !! 1 ?= 2
 end

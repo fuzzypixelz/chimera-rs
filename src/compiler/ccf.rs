@@ -1,4 +1,4 @@
-use crate::parser::ast::{Def, Expr, ItemKind, AST};
+use crate::parser::cst::{Def, Expr, ItemKind, AST};
 use thiserror::Error;
 
 /// Core Chimera Form, a flatter AST.

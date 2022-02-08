@@ -3,6 +3,11 @@
 use polytype::TypeSchema;
 
 #[derive(Debug, PartialEq, Clone)]
+pub struct AST {
+    pub items: Vec<Item>,
+}
+
+#[derive(Debug, PartialEq, Clone)]
 pub struct Attr {
     pub name: String,
     pub args: Vec<String>,

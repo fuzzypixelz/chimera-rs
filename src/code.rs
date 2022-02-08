@@ -82,7 +82,7 @@ impl Env {
                 match env.borrow().outer.clone() {
                     // TODO: This panic is no longer necessary as the typechecker
                     // is supposed to catch them beforehand. The same goes for all
-                    // the `if let ... {} else {}` blocks in compiler.rs
+                    // the `if let ... {} else {}` blocks in interpreter
                     // It would make more sense to do an `unreachable_unchecked()`
                     // in this case. That function however is unsafe and complete UB.
                     // I would argue it's acceptable since Algorithm J is mathematically

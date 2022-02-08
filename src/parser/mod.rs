@@ -7,9 +7,11 @@ use annotate_snippets::{
 use anyhow::{Error, Result};
 use lalrpop_util::ParseError;
 
-use crate::{ast::Item, lexer::Tok};
 use crate::error::LexicalError;
 use crate::lexer::Lexer;
+use crate::{ast::Item, lexer::Tok};
+
+pub mod cst;
 
 pub fn parse(source: &str) -> Result<Vec<Item>> {
     let lexer = Lexer::new(source);

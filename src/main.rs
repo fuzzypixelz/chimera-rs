@@ -18,6 +18,7 @@ mod attribute;
 mod code;
 mod compiler;
 mod error;
+mod interpreter;
 mod lexer;
 mod parser;
 mod typechecker;

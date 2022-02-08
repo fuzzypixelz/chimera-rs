@@ -1,4 +1,4 @@
-use crate::parser::ast::{Def, Expr, ExprKind, Lit};
+use crate::parser::cst::{Def, Expr, ExprKind, Lit};
 
 use super::ccf::CCF;
 

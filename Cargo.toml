@@ -14,3 +14,5 @@ polytype = { version = "6.2.1", default-features = false }
 
 [build-dependencies]
 lalrpop = "0.19.6"
+cmake = "0.1.48"
+bindgen = "0.59.2"

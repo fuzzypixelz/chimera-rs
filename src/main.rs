@@ -19,6 +19,7 @@ mod code;
 mod compiler;
 mod error;
 mod lexer;
+mod mlir;
 mod parser;
 mod typechecker;
 mod value;

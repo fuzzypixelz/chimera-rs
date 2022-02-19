@@ -68,14 +68,14 @@ pub struct Operation {
     operation: MlirOperation,
 }
 
-impl Drop for Operation {
-    fn drop(&mut self) {
-        // unsafe { mlirOperationDestroy(self.operation) }
+impl Operation {
+    pub unsafe fn as_raw(&self) -> MlirOperation {
+        self.operation
     }
 }
 
-impl From<Operation> for MlirOperation {
-    fn from(item: Operation) -> Self {
-        item.operation
+impl Drop for Operation {
+    fn drop(&mut self) {
+        // unsafe { mlirOperationDestroy(self.operation) }
     }
 }

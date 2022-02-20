@@ -1,68 +1,82 @@
+use std::marker::PhantomData;
+
 use super::types::Type;
 use super::{raw::*, Context};
 
 #[derive(Copy, Clone)]
 /// Wrapper around the C API's MlirNamedAttribute.
-pub struct NamedAttribute {
-    named_attr: MlirNamedAttribute,
+pub struct NamedAttribute<'n> {
+    /// Opaque pointer the data across the FFI, generally a C++ object.
+    inner: MlirNamedAttribute,
+    /// Force the type to "own" a reference to the context it was created in,
+    /// so that its lifetime may be the same as that of the context.
+    _marker: PhantomData<&'n ()>,
 }
 
-impl NamedAttribute {
+impl NamedAttribute<'_> {
     /// Create an MLIR named attribute from an attribute and its name.
-    pub fn new(ctx: &Context, name: &str, attr: Attribute) -> Self {
+    pub fn new(ctx: &Context, name: &str, attr: Attribute<'_>) -> Self {
         NamedAttribute {
-            named_attr: unsafe {
+            inner: unsafe {
                 mlirNamedAttributeGet(mlirIdentifierGet(ctx.as_raw(), name.into()), attr.as_raw())
             },
+            _marker: PhantomData,
         }
     }
 
-    /// Get an Attribute from a raw MlirAttribute.
-    pub fn from_raw(named_attr: MlirNamedAttribute) -> Self {
-        NamedAttribute { named_attr }
+    /// Return the underlying raw MlirNamedAttribute.
+    pub fn as_raw(&self) -> MlirNamedAttribute {
+        self.inner
     }
 
-    /// Return the underlying raw MlirAttribute.
-    pub fn as_raw(&self) -> MlirNamedAttribute {
-        self.named_attr
+    /// Return the underlying raw MlirNamedAttribute and consume the named attribute.
+    pub fn into_raw(self) -> MlirNamedAttribute {
+        self.inner
     }
 }
 
 #[derive(Copy, Clone)]
 /// Wrapper around the C API's MlirAttribute.
-pub struct Attribute {
-    attr: MlirAttribute,
+pub struct Attribute<'a> {
+    /// Opaque pointer the data across the FFI, generally a C++ object.
+    inner: MlirAttribute,
+    /// Force the type to "own" a reference to the context it was created in,
+    /// so that its lifetime may be the same as that of the context.
+    _marker: PhantomData<&'a ()>,
 }
 
-impl Attribute {
+impl Attribute<'_> {
     /// Create a type attribute from a Type.
-    pub fn new_type(type_: Type) -> Self {
+    pub fn new_type(type_: Type<'_>) -> Self {
         Attribute {
-            attr: unsafe { mlirTypeAttrGet(type_.into_raw()) },
+            inner: unsafe { mlirTypeAttrGet(type_.into_raw()) },
+            _marker: PhantomData,
         }
     }
 
     /// Create a string attribute from a str.
     pub fn new_string(ctx: &Context, string: &str) -> Self {
         Attribute {
-            attr: unsafe { mlirStringAttrGet(ctx.as_raw(), string.into()) },
+            inner: unsafe { mlirStringAttrGet(ctx.as_raw(), string.into()) },
+            _marker: PhantomData,
         }
     }
 
     /// Create an integer attribute from a type and a size.
-    pub fn new_integer(type_: Type, size: usize) -> Self {
+    pub fn new_integer(type_: Type<'_>, size: usize) -> Self {
         Attribute {
-            attr: unsafe { mlirIntegerAttrGet(type_.into_raw(), size as i64) },
+            inner: unsafe { mlirIntegerAttrGet(type_.into_raw(), size as i64) },
+            _marker: PhantomData,
         }
-    }
-
-    /// Get a Value from a raw MlirValue.
-    pub fn from_raw(attr: MlirAttribute) -> Self {
-        Attribute { attr }
     }
 
     /// Return the underlying raw MlirAttribute.
     pub fn as_raw(&self) -> MlirAttribute {
-        self.attr
+        self.inner
+    }
+
+    /// Return the underlying raw MlirAttribute, and consume the attribute.
+    pub fn into_raw(self) -> MlirAttribute {
+        self.inner
     }
 }

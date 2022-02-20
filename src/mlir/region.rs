@@ -5,41 +5,36 @@ use super::raw::*;
 
 /// Wrapper around the C API's MlirRegion since we can't implement Drop for Copy types.
 pub struct Region {
-    region: MlirRegion,
+    inner: MlirRegion,
 }
 
 impl Region {
     /// Create an empty Region.
     pub fn new() -> Self {
         Region {
-            region: unsafe { mlirRegionCreate() },
+            inner: unsafe { mlirRegionCreate() },
         }
     }
 
     /// Append the `operation` at then end of the Block.
     pub fn append(&mut self, block: Block) {
         // Here the MlirBlock takes ownership of the Block, so consider it dropped!
-        unsafe { mlirRegionAppendOwnedBlock(self.region, block.into_raw()) }
-    }
-
-    /// Get a Region from a raw MlirValue.
-    pub fn from_raw(region: MlirRegion) -> Self {
-        Region { region }
+        unsafe { mlirRegionAppendOwnedBlock(self.inner, block.into_raw()) }
     }
 
     /// Return the underlying raw MlirRegion.
     pub fn as_raw(&self) -> MlirRegion {
-        self.region
+        self.inner
     }
 
     /// Return the underlying raw MlirRegion and consume the region.
     pub fn into_raw(self) -> MlirRegion {
-        ManuallyDrop::new(self).region
+        ManuallyDrop::new(self).inner
     }
 }
 
 impl Drop for Region {
     fn drop(&mut self) {
-        unsafe { mlirRegionDestroy(self.region) }
+        unsafe { mlirRegionDestroy(self.inner) }
     }
 }

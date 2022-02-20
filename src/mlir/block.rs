@@ -1,11 +1,12 @@
 use super::operation::Operation;
 use super::raw::*;
 use super::value::Value;
+use std::marker::PhantomData;
 use std::mem::ManuallyDrop;
 
 /// Wrapper around the C API's MlirBlock since we can't implement Drop for Copy types.
 pub struct Block {
-    block: MlirBlock,
+    inner: MlirBlock,
 }
 
 impl Block {
@@ -16,7 +17,7 @@ impl Block {
     pub fn new(arguments: &[(MlirType, MlirLocation)]) -> Self {
         let (types, locs): (Vec<_>, Vec<_>) = arguments.iter().cloned().unzip();
         Block {
-            block: unsafe {
+            inner: unsafe {
                 mlirBlockCreate(arguments.len() as isize, types.as_ptr(), locs.as_ptr())
             },
         }
@@ -25,7 +26,7 @@ impl Block {
     /// Append the `operation` at then end of the Block.
     pub fn append(&mut self, operation: Operation) {
         // Here the MlirBlock takes ownership of the Operation, so consider it dropped!
-        unsafe { mlirBlockAppendOwnedOperation(self.block, operation.into_raw()) }
+        unsafe { mlirBlockAppendOwnedOperation(self.inner, operation.into_raw()) }
     }
 
     /// Returns the `position`-th argument of the Block.
@@ -33,35 +34,37 @@ impl Block {
     /// # Panics
     ///
     /// Panics if `position` is out of bounds.
-    pub fn get_arg(&self, position: usize) -> Value {
+    pub fn get_arg(&self, position: usize) -> Value<'_> {
         unsafe {
             if position > self.arg_len() {
                 panic!("block argument position is out of bounds.")
             } else {
-                let value = mlirBlockGetArgument(self.block, position as isize);
-                Value::from_raw(value)
+                Value::from_raw(
+                    mlirBlockGetArgument(self.inner, position as isize),
+                    PhantomData,
+                )
             }
         }
     }
 
     /// Returns the number of arguments in the Block.
     pub fn arg_len(&self) -> usize {
-        unsafe { mlirBlockGetNumArguments(self.block) as usize }
+        unsafe { mlirBlockGetNumArguments(self.inner) as usize }
     }
 
     /// Return the underlying raw MlirBlock.
     pub fn as_raw(&self) -> MlirBlock {
-        self.block
+        self.inner
     }
 
     /// Return the underlying raw MlirBlock and consume the Block.
     pub fn into_raw(self) -> MlirBlock {
-        ManuallyDrop::new(self).block
+        ManuallyDrop::new(self).inner
     }
 }
 
 impl Drop for Block {
     fn drop(&mut self) {
-        unsafe { mlirBlockDestroy(self.block) }
+        unsafe { mlirBlockDestroy(self.inner) }
     }
 }

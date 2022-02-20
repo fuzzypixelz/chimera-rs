@@ -4,50 +4,62 @@ use super::region::Region;
 use super::types::Type;
 use super::value::Value;
 use super::{Location, Module};
+
+use std::ffi::c_void;
+use std::fmt;
+use std::marker::PhantomData;
 use std::mem::ManuallyDrop;
 use std::slice;
+use std::str;
 
 /// Construct an MLIR Operation from a set of attributes, results and operands.
 pub struct Builder {
-    state: MlirOperationState,
+    inner: MlirOperationState,
 }
 
 impl Builder {
     /// Make a new MLIR Operation builder from the operation's name (with the namespace prefix)
     /// and its location in the source code.
-    pub fn new(name: &str, location: Location) -> Self {
+    ///
+    /// # Safety
+    ///
+    /// Currently it is undefined behaviour to try to provide missing attributes for an operation.
+    /// For example, if one define a `builtin.func` operation without giving the mandatory "sym_name"
+    /// attribute, MLIR will simply throw a Segmentation Fault. We cannot hope to provide logic for
+    /// all the (growing) list of possible dialects. So in conclusion, RTFM!
+    pub fn new(name: &str, location: Location<'_>) -> Self {
         Builder {
-            state: unsafe { mlirOperationStateGet(name.into(), location.into_raw()) },
+            inner: unsafe { mlirOperationStateGet(name.into(), location.into_raw()) },
         }
     }
 
     /// Enable type inference for the constructed Operation, results should not
     /// be added when enabling this.
     pub fn infer_results(mut self) -> Self {
-        unsafe { mlirOperationStateEnableResultTypeInference(&mut self.state) }
+        unsafe { mlirOperationStateEnableResultTypeInference(&mut self.inner) }
         self
     }
 
     /// Add named attributes to the constructed Operation.
-    pub fn attributes(mut self, items: &[NamedAttribute]) -> Self {
+    pub fn attributes(mut self, items: &[NamedAttribute<'_>]) -> Self {
         let items = items
             .iter()
             .map(|named_attr| named_attr.as_raw())
             .collect::<Box<[_]>>();
         unsafe {
-            mlirOperationStateAddAttributes(&mut self.state, items.len() as isize, items.as_ptr())
+            mlirOperationStateAddAttributes(&mut self.inner, items.len() as isize, items.as_ptr())
         }
         self
     }
 
     /// Add operands to the constructed Operation.
-    pub fn operands(mut self, items: &[Value]) -> Self {
+    pub fn operands(mut self, items: &[Value<'_>]) -> Self {
         let items = items
             .iter()
             .map(|value| value.as_raw())
             .collect::<Box<[_]>>();
         unsafe {
-            mlirOperationStateAddOperands(&mut self.state, items.len() as isize, items.as_ptr())
+            mlirOperationStateAddOperands(&mut self.inner, items.len() as isize, items.as_ptr())
         }
         self
     }
@@ -62,19 +74,19 @@ impl Builder {
             .map(|region| region.into_raw())
             .collect::<Box<[_]>>();
         unsafe {
-            mlirOperationStateAddOwnedRegions(&mut self.state, items.len() as isize, items.as_ptr())
+            mlirOperationStateAddOwnedRegions(&mut self.inner, items.len() as isize, items.as_ptr())
         }
         self
     }
 
     /// Add result types to the constructed Operation.
-    pub fn results(mut self, items: &[Type]) -> Self {
+    pub fn results(mut self, items: &[Type<'_>]) -> Self {
         let items = items
             .into_iter()
             .map(|type_| type_.as_raw())
             .collect::<Box<[_]>>();
         unsafe {
-            mlirOperationStateAddResults(&mut self.state, items.len() as isize, items.as_ptr())
+            mlirOperationStateAddResults(&mut self.inner, items.len() as isize, items.as_ptr())
         }
         self
     }
@@ -84,13 +96,13 @@ impl Builder {
         // We cannot drop the state in this case since its ownership is
         // transferred to MlirOperation.
         Operation {
-            operation: unsafe { mlirOperationCreate(&mut self.into_raw()) },
+            inner: unsafe { mlirOperationCreate(&mut self.into_raw()) },
         }
     }
 
     /// Return the underlying raw MlirOperationState and consume the OperationState.
     pub fn into_raw(self) -> MlirOperationState {
-        ManuallyDrop::new(self).state
+        ManuallyDrop::new(self).inner
     }
 }
 
@@ -98,7 +110,7 @@ impl Drop for Builder {
     fn drop(&mut self) {
         unsafe {
             // MlirOperationState owns the regions it points to but nothing else.
-            let regions = slice::from_raw_parts(self.state.regions, self.state.nRegions as usize);
+            let regions = slice::from_raw_parts(self.inner.regions, self.inner.nRegions as usize);
             for &region in regions {
                 mlirRegionDestroy(region)
             }
@@ -108,7 +120,7 @@ impl Drop for Builder {
 
 /// Wrapper around the C API's MlirOperation since we can't implement Drop for Copy types.
 pub struct Operation {
-    operation: MlirOperation,
+    inner: MlirOperation,
 }
 
 impl Operation {
@@ -117,41 +129,43 @@ impl Operation {
     /// # Panics
     ///
     /// Panics if `position` is out of bounds.
-    pub fn get_res(&self, position: usize) -> Value {
+    pub fn get_res(&self, position: usize) -> Value<'_> {
         unsafe {
             if position > self.res_len() {
                 panic!("block argument position is out of bounds.")
             } else {
-                let value = mlirOperationGetResult(self.operation, position as isize);
-                Value::from_raw(value)
+                Value::from_raw(
+                    mlirOperationGetResult(self.inner, position as isize),
+                    PhantomData,
+                )
             }
         }
     }
 
     /// Returns the number of arguments in the Block.
     pub fn res_len(&self) -> usize {
-        unsafe { mlirOperationGetNumResults(self.operation) as usize }
+        unsafe { mlirOperationGetNumResults(self.inner) as usize }
     }
 
     /// Print out the operation to stderr.
     pub fn dump(&self) {
-        unsafe { mlirOperationDump(self.operation) }
+        unsafe { mlirOperationDump(self.inner) }
     }
 
     /// Return the underlying raw MlirOperation.
     pub fn as_raw(&self) -> MlirOperation {
-        self.operation
+        self.inner
     }
 
     /// Return the underlying raw MlirOperation and consume the Operation.
     pub fn into_raw(self) -> MlirOperation {
-        ManuallyDrop::new(self).operation
+        ManuallyDrop::new(self).inner
     }
 }
 
 impl Drop for Operation {
     fn drop(&mut self) {
-        unsafe { mlirOperationDestroy(self.operation) }
+        unsafe { mlirOperationDestroy(self.inner) }
     }
 }
 
@@ -160,7 +174,7 @@ impl From<Module> for Operation {
         // While viewing the module as an operation we should drop it
         // as an Operation and avoid calling Module's Drop.
         Operation {
-            operation: unsafe { mlirModuleGetOperation(item.into_raw()) },
+            inner: unsafe { mlirModuleGetOperation(item.into_raw()) },
         }
     }
 }

@@ -2,6 +2,7 @@ use super::attribute::NamedAttribute;
 use super::raw::*;
 use super::region::Region;
 use super::value::Value;
+use super::Module;
 use std::mem::ManuallyDrop;
 use std::slice;
 
@@ -13,9 +14,9 @@ pub struct Builder {
 impl Builder {
     /// Make a new MLIR Operation builder from the operation's name (with the namespace prefix)
     /// and its location in the source code.
-    pub fn new(name: &str, loc: MlirLocation) -> Self {
+    pub fn new(name: &str, location: MlirLocation) -> Self {
         Builder {
-            state: unsafe { mlirOperationStateGet(name.into(), loc) },
+            state: unsafe { mlirOperationStateGet(name.into(), location) },
         }
     }
 
@@ -45,13 +46,14 @@ impl Builder {
     }
 
     /// Add regions to the constructed Operation.
-    pub fn regions(mut self, items: &[Region]) -> Self {
-        let items: Vec<_> = ManuallyDrop::new(items)
-            .iter()
-            .map(Region::as_raw)
-            .collect();
+    ///
+    /// This takes a Boxed slice instead of a slice reference since
+    /// it takes ownership of the regions.
+    pub fn regions(mut self, items: Box<[Region]>) -> Self {
         unsafe {
-            mlirOperationStateAddOwnedRegions(&mut self.state, items.len() as isize, items.as_ptr())
+            let size = items.len();
+            let items = Box::into_raw(items);
+            mlirOperationStateAddOwnedRegions(&mut self.state, size as isize, items as *const _)
         }
         self
     }
@@ -118,10 +120,26 @@ impl Operation {
     pub fn as_raw(&self) -> MlirOperation {
         self.operation
     }
+
+    /// Print out the operation to stderr.
+    pub fn dump(&self) {
+        unsafe { mlirOperationDump(self.operation) }
+    }
 }
 
 impl Drop for Operation {
     fn drop(&mut self) {
-        // unsafe { mlirOperationDestroy(self.operation) }
+        unsafe { mlirOperationDestroy(self.operation) }
+    }
+}
+
+impl From<Module> for Operation {
+    fn from(item: Module) -> Self {
+        // While viewing the module as an operation we should drop it
+        // as an Operation and avoid calling Module's Drop.
+        let item = ManuallyDrop::new(item);
+        Operation {
+            operation: unsafe { mlirModuleGetOperation(item.as_raw()) },
+        }
     }
 }

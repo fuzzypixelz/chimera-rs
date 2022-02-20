@@ -1,4 +1,7 @@
-use super::*;
+use super::attribute::NamedAttribute;
+use super::raw::*;
+use super::region::Region;
+use super::value::Value;
 use std::mem::ManuallyDrop;
 use std::slice;
 
@@ -24,7 +27,8 @@ impl Builder {
     }
 
     /// Add named attributes to the constructed Operation.
-    pub fn attributes(mut self, items: &[MlirNamedAttribute]) -> Self {
+    pub fn attributes(mut self, items: &[NamedAttribute]) -> Self {
+        let items: Vec<_> = items.iter().map(NamedAttribute::as_raw).collect();
         unsafe {
             mlirOperationStateAddAttributes(&mut self.state, items.len() as isize, items.as_ptr())
         }
@@ -32,9 +36,30 @@ impl Builder {
     }
 
     /// Add operands to the constructed Operation.
-    pub fn operands(mut self, items: &[MlirValue]) -> Self {
+    pub fn operands(mut self, items: &[Value]) -> Self {
+        let items: Vec<_> = items.iter().map(Value::as_raw).collect();
         unsafe {
             mlirOperationStateAddOperands(&mut self.state, items.len() as isize, items.as_ptr())
+        }
+        self
+    }
+
+    /// Add regions to the constructed Operation.
+    pub fn regions(mut self, items: &[Region]) -> Self {
+        let items: Vec<_> = ManuallyDrop::new(items)
+            .iter()
+            .map(Region::as_raw)
+            .collect();
+        unsafe {
+            mlirOperationStateAddOwnedRegions(&mut self.state, items.len() as isize, items.as_ptr())
+        }
+        self
+    }
+
+    /// Add result types to the constructed Operation.
+    pub fn results(mut self, items: &[MlirType]) -> Self {
+        unsafe {
+            mlirOperationStateAddResults(&mut self.state, items.len() as isize, items.as_ptr())
         }
         self
     }
@@ -52,12 +77,11 @@ impl Builder {
 
 impl Drop for Builder {
     fn drop(&mut self) {
-        // MlirOperationState owns the regions it points to but nothing else.
-        let regions =
-            unsafe { slice::from_raw_parts(self.state.regions, self.state.nRegions as usize) };
-        for &region in regions {
-            unsafe {
-                mlirRegionDestroy(region);
+        unsafe {
+            // MlirOperationState owns the regions it points to but nothing else.
+            let regions = slice::from_raw_parts(self.state.regions, self.state.nRegions as usize);
+            for &region in regions {
+                mlirRegionDestroy(region)
             }
         }
     }
@@ -69,7 +93,29 @@ pub struct Operation {
 }
 
 impl Operation {
-    pub unsafe fn as_raw(&self) -> MlirOperation {
+    /// Returns the `position`-th result of the Operation.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `position` is out of bounds.
+    pub fn get_res(&self, position: usize) -> Value {
+        unsafe {
+            if position > self.res_len() {
+                panic!("block argument position is out of bounds.")
+            } else {
+                let value = mlirOperationGetResult(self.operation, position as isize);
+                Value::from_raw(value)
+            }
+        }
+    }
+
+    /// Returns the number of arguments in the Block.
+    pub fn res_len(&self) -> usize {
+        unsafe { mlirOperationGetNumResults(self.operation) as usize }
+    }
+
+    /// Return the underlying raw MlirOperation.
+    pub fn as_raw(&self) -> MlirOperation {
         self.operation
     }
 }

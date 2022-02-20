@@ -1,12 +1,13 @@
-#![allow(non_upper_case_globals)]
-#![allow(non_camel_case_types)]
-#![allow(non_snake_case)]
-#![allow(dead_code)]
+pub mod raw {
+    #![allow(non_upper_case_globals)]
+    #![allow(non_camel_case_types)]
+    #![allow(non_snake_case)]
+    #![allow(dead_code)]
 
-include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
+    include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
+}
 
-pub mod block;
-pub mod operation;
+use raw::MlirStringRef;
 
 impl From<&str> for MlirStringRef {
     fn from(item: &str) -> Self {
@@ -16,3 +17,10 @@ impl From<&str> for MlirStringRef {
         }
     }
 }
+
+pub mod attribute;
+pub mod block;
+pub mod context;
+pub mod operation;
+pub mod region;
+pub mod value;

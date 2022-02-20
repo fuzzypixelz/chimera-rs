@@ -1,4 +1,4 @@
-use super::{context::Context, raw::*};
+use super::{raw::*, Context};
 
 #[derive(Copy, Clone)]
 /// Wrapper around the C API's MlirNamedAttribute.

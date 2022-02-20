@@ -29,7 +29,10 @@ impl Builder {
 
     /// Add named attributes to the constructed Operation.
     pub fn attributes(mut self, items: &[NamedAttribute]) -> Self {
-        let items: Vec<_> = items.iter().map(NamedAttribute::as_raw).collect();
+        let items = items
+            .iter()
+            .map(|named_attr| named_attr.as_raw())
+            .collect::<Box<[_]>>();
         unsafe {
             mlirOperationStateAddAttributes(&mut self.state, items.len() as isize, items.as_ptr())
         }
@@ -38,7 +41,10 @@ impl Builder {
 
     /// Add operands to the constructed Operation.
     pub fn operands(mut self, items: &[Value]) -> Self {
-        let items: Vec<_> = items.iter().map(Value::as_raw).collect();
+        let items = items
+            .iter()
+            .map(|value| value.as_raw())
+            .collect::<Box<[_]>>();
         unsafe {
             mlirOperationStateAddOperands(&mut self.state, items.len() as isize, items.as_ptr())
         }
@@ -47,13 +53,15 @@ impl Builder {
 
     /// Add regions to the constructed Operation.
     ///
-    /// This takes a Boxed slice instead of a slice reference since
+    /// This takes a vector instead of a slice reference since
     /// it takes ownership of the regions.
-    pub fn regions(mut self, items: Box<[Region]>) -> Self {
+    pub fn regions(mut self, items: Vec<Region>) -> Self {
+        let items = items
+            .into_iter()
+            .map(Region::into_raw)
+            .collect::<Box<[_]>>();
         unsafe {
-            let size = items.len();
-            let items = Box::into_raw(items);
-            mlirOperationStateAddOwnedRegions(&mut self.state, size as isize, items as *const _)
+            mlirOperationStateAddOwnedRegions(&mut self.state, items.len() as isize, items.as_ptr())
         }
         self
     }
@@ -70,10 +78,14 @@ impl Builder {
     pub fn build(self) -> Operation {
         // We cannot drop the state in this case since its ownership is
         // transferred to MlirOperation.
-        let mut builder = ManuallyDrop::new(self);
         Operation {
-            operation: unsafe { mlirOperationCreate(&mut builder.state) },
+            operation: unsafe { mlirOperationCreate(&mut self.into_raw()) },
         }
+    }
+
+    /// Return the underlying raw MlirOperationState and consume the OperationState.
+    pub fn into_raw(self) -> MlirOperationState {
+        ManuallyDrop::new(self).state
     }
 }
 
@@ -116,14 +128,19 @@ impl Operation {
         unsafe { mlirOperationGetNumResults(self.operation) as usize }
     }
 
+    /// Print out the operation to stderr.
+    pub fn dump(&self) {
+        unsafe { mlirOperationDump(self.operation) }
+    }
+
     /// Return the underlying raw MlirOperation.
     pub fn as_raw(&self) -> MlirOperation {
         self.operation
     }
 
-    /// Print out the operation to stderr.
-    pub fn dump(&self) {
-        unsafe { mlirOperationDump(self.operation) }
+    /// Return the underlying raw MlirOperation and consume the Operation.
+    pub fn into_raw(self) -> MlirOperation {
+        ManuallyDrop::new(self).operation
     }
 }
 
@@ -137,9 +154,8 @@ impl From<Module> for Operation {
     fn from(item: Module) -> Self {
         // While viewing the module as an operation we should drop it
         // as an Operation and avoid calling Module's Drop.
-        let item = ManuallyDrop::new(item);
         Operation {
-            operation: unsafe { mlirModuleGetOperation(item.as_raw()) },
+            operation: unsafe { mlirModuleGetOperation(item.into_raw()) },
         }
     }
 }

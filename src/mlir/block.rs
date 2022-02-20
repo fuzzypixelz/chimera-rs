@@ -25,8 +25,7 @@ impl Block {
     /// Append the `operation` at then end of the Block.
     pub fn append(&mut self, operation: Operation) {
         // Here the MlirBlock takes ownership of the Operation, so consider it dropped!
-        let operation = ManuallyDrop::new(operation);
-        unsafe { mlirBlockAppendOwnedOperation(self.block, operation.as_raw()) }
+        unsafe { mlirBlockAppendOwnedOperation(self.block, operation.into_raw()) }
     }
 
     /// Returns the `position`-th argument of the Block.
@@ -54,10 +53,15 @@ impl Block {
     pub fn as_raw(&self) -> MlirBlock {
         self.block
     }
+
+    /// Return the underlying raw MlirBlock and consume the Block.
+    pub fn into_raw(self) -> MlirBlock {
+        ManuallyDrop::new(self).block
+    }
 }
 
 impl Drop for Block {
     fn drop(&mut self) {
-        // unsafe { mlirBlockDestroy(self.block) }
+        unsafe { mlirBlockDestroy(self.block) }
     }
 }

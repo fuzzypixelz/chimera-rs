@@ -20,8 +20,7 @@ impl Region {
     /// Append the `operation` at then end of the Block.
     pub fn append(&mut self, block: Block) {
         // Here the MlirBlock takes ownership of the Block, so consider it dropped!
-        let block = ManuallyDrop::new(block);
-        unsafe { mlirRegionAppendOwnedBlock(self.region, block.as_raw()) }
+        unsafe { mlirRegionAppendOwnedBlock(self.region, block.into_raw()) }
     }
 
     /// Get a Region from a raw MlirValue.
@@ -33,10 +32,15 @@ impl Region {
     pub fn as_raw(&self) -> MlirRegion {
         self.region
     }
+
+    /// Return the underlying raw MlirRegion and consume the region.
+    pub fn into_raw(self) -> MlirRegion {
+        ManuallyDrop::new(self).region
+    }
 }
 
 impl Drop for Region {
     fn drop(&mut self) {
-        // unsafe { mlirRegionDestroy(self.region) }
+        unsafe { mlirRegionDestroy(self.region) }
     }
 }

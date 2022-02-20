@@ -1,3 +1,4 @@
+use super::types::Type;
 use super::{raw::*, Context};
 
 #[derive(Copy, Clone)]
@@ -35,9 +36,9 @@ pub struct Attribute {
 
 impl Attribute {
     /// Create a type attribute from a Type.
-    pub fn new_type(type_: MlirType) -> Self {
+    pub fn new_type(type_: Type) -> Self {
         Attribute {
-            attr: unsafe { mlirTypeAttrGet(type_) },
+            attr: unsafe { mlirTypeAttrGet(type_.into_raw()) },
         }
     }
 
@@ -49,9 +50,9 @@ impl Attribute {
     }
 
     /// Create an integer attribute from a type and a size.
-    pub fn new_integer(type_: MlirType, size: usize) -> Self {
+    pub fn new_integer(type_: Type, size: usize) -> Self {
         Attribute {
-            attr: unsafe { mlirIntegerAttrGet(type_, size as i64) },
+            attr: unsafe { mlirIntegerAttrGet(type_.into_raw(), size as i64) },
         }
     }
 

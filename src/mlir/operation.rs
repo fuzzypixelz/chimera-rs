@@ -1,8 +1,9 @@
 use super::attribute::NamedAttribute;
 use super::raw::*;
 use super::region::Region;
+use super::types::Type;
 use super::value::Value;
-use super::Module;
+use super::{Location, Module};
 use std::mem::ManuallyDrop;
 use std::slice;
 
@@ -14,9 +15,9 @@ pub struct Builder {
 impl Builder {
     /// Make a new MLIR Operation builder from the operation's name (with the namespace prefix)
     /// and its location in the source code.
-    pub fn new(name: &str, location: MlirLocation) -> Self {
+    pub fn new(name: &str, location: Location) -> Self {
         Builder {
-            state: unsafe { mlirOperationStateGet(name.into(), location) },
+            state: unsafe { mlirOperationStateGet(name.into(), location.into_raw()) },
         }
     }
 
@@ -58,7 +59,7 @@ impl Builder {
     pub fn regions(mut self, items: Vec<Region>) -> Self {
         let items = items
             .into_iter()
-            .map(Region::into_raw)
+            .map(|region| region.into_raw())
             .collect::<Box<[_]>>();
         unsafe {
             mlirOperationStateAddOwnedRegions(&mut self.state, items.len() as isize, items.as_ptr())
@@ -67,7 +68,11 @@ impl Builder {
     }
 
     /// Add result types to the constructed Operation.
-    pub fn results(mut self, items: &[MlirType]) -> Self {
+    pub fn results(mut self, items: &[Type]) -> Self {
+        let items = items
+            .into_iter()
+            .map(|type_| type_.as_raw())
+            .collect::<Box<[_]>>();
         unsafe {
             mlirOperationStateAddResults(&mut self.state, items.len() as isize, items.as_ptr())
         }

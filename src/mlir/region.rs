@@ -1,7 +1,6 @@
 use std::mem::ManuallyDrop;
 
 use super::block::Block;
-use super::raw::mlirRegionAppendOwnedBlock;
 use super::raw::*;
 
 /// Wrapper around the C API's MlirRegion since we can't implement Drop for Copy types.
@@ -10,7 +9,7 @@ pub struct Region {
 }
 
 impl Region {
-    /// Create an empty Region
+    /// Create an empty Region.
     pub fn new() -> Self {
         Region {
             region: unsafe { mlirRegionCreate() },

@@ -1,11 +1,11 @@
 use super::attribute::NamedAttribute;
 use super::raw::*;
 use super::region::Region;
+use super::stringref_printer_callback;
 use super::types::Type;
 use super::value::Value;
 use super::{Location, Module};
 
-use std::ffi::c_void;
 use std::fmt;
 use std::marker::PhantomData;
 use std::mem::ManuallyDrop;
@@ -176,5 +176,19 @@ impl From<Module> for Operation {
         Operation {
             inner: unsafe { mlirModuleGetOperation(item.into_raw()) },
         }
+    }
+}
+
+impl fmt::Display for Operation {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        unsafe {
+            mlirOperationPrint(
+                self.inner,
+                Some(stringref_printer_callback),
+                f as *mut _ as *mut _,
+            )
+        }
+        // A bit unfortunate that we cannot get the results from the callback.
+        Ok(())
     }
 }

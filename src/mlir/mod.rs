@@ -14,6 +14,10 @@ pub mod region;
 pub mod types;
 pub mod value;
 
+use std::ffi::c_void;
+use std::fmt;
+use std::slice;
+use std::str;
 use std::{marker::PhantomData, mem::ManuallyDrop};
 
 use operation::Operation;
@@ -26,6 +30,15 @@ impl From<&str> for MlirStringRef {
             length: item.len() as u64,
         }
     }
+}
+
+#[allow(unused_must_use)]
+unsafe extern "C" fn stringref_printer_callback(string: MlirStringRef, data: *mut c_void) {
+    let fmt = &mut *(data as *mut fmt::Formatter<'_>);
+    let slice = slice::from_raw_parts(string.data as *const u8, string.length as usize);
+    // NOTE: should we be using utf8 here?
+    // Of course the UTF-8 is valid, in C++ we trust :^)
+    write!(fmt, "{}", str::from_utf8_unchecked(slice));
 }
 
 /// Wrapper around the C API's MlirContext.
@@ -143,9 +156,22 @@ impl Location<'_> {
     }
 }
 
+impl fmt::Display for Location<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        unsafe {
+            mlirLocationPrint(
+                self.inner,
+                Some(stringref_printer_callback),
+                f as *mut _ as *mut _,
+            )
+        }
+        Ok(())
+    }
+}
+
 /// Wrapper around the C API's MlirPassManager.
 pub struct Pass {
-    pass: MlirPassManager,
+    inner: MlirPassManager,
 }
 
 impl Pass {
@@ -154,7 +180,7 @@ impl Pass {
     /// See the dialect_to_dialect() methods for available conversions.
     pub fn new(context: &Context) -> Self {
         Pass {
-            pass: unsafe { mlirPassManagerCreate(context.as_raw()) },
+            inner: unsafe { mlirPassManagerCreate(context.as_raw()) },
         }
     }
 
@@ -162,7 +188,7 @@ impl Pass {
     pub fn std_to_llvm(self) -> Self {
         unsafe {
             let conversion = mlirCreateConversionConvertStandardToLLVM();
-            mlirPassManagerAddOwnedPass(self.pass, conversion);
+            mlirPassManagerAddOwnedPass(self.inner, conversion);
         }
         self
     }
@@ -171,7 +197,7 @@ impl Pass {
     pub fn scf_to_openmp(self) -> Self {
         unsafe {
             let conversion = mlirCreateConversionConvertSCFToOpenMP();
-            mlirPassManagerAddOwnedPass(self.pass, conversion);
+            mlirPassManagerAddOwnedPass(self.inner, conversion);
         }
         self
     }
@@ -180,7 +206,7 @@ impl Pass {
     pub fn openmp_to_llvm(self) -> Self {
         unsafe {
             let conversion = mlirCreateConversionConvertOpenMPToLLVM();
-            mlirPassManagerAddOwnedPass(self.pass, conversion);
+            mlirPassManagerAddOwnedPass(self.inner, conversion);
         }
         self
     }
@@ -191,13 +217,13 @@ impl Pass {
     pub fn run(&self, module: &mut Module) {
         // TODO: Do proper error handling with the LogicalResult.
         unsafe {
-            mlirPassManagerRun(self.pass, module.as_raw());
+            mlirPassManagerRun(self.inner, module.as_raw());
         }
     }
 }
 
 impl Drop for Pass {
     fn drop(&mut self) {
-        unsafe { mlirPassManagerDestroy(self.pass) }
+        unsafe { mlirPassManagerDestroy(self.inner) }
     }
 }

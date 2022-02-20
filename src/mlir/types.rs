@@ -1,6 +1,6 @@
-use std::marker::PhantomData;
+use std::{fmt, marker::PhantomData};
 
-use super::{raw::*, Context};
+use super::{raw::*, stringref_printer_callback, Context};
 
 #[derive(Clone, Copy)]
 /// Wrapper around the C API's MlirType.
@@ -77,5 +77,18 @@ impl Context {
 impl PartialEq for Type<'_> {
     fn eq(&self, other: &Self) -> bool {
         unsafe { mlirTypeEqual(self.into_raw(), other.into_raw()) }
+    }
+}
+
+impl fmt::Display for Type<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        unsafe {
+            mlirTypePrint(
+                self.inner,
+                Some(stringref_printer_callback),
+                f as *mut _ as *mut _,
+            )
+        }
+        Ok(())
     }
 }

@@ -2,9 +2,9 @@ use std::cell::RefCell;
 use std::io::{self, Read};
 use std::rc::Rc;
 
-use crate::code::CompiledCode;
-use crate::value::{List, Value, WoValue};
-use crate::Env;
+use super::code::CompiledCode;
+use super::value::{List, Value, WoValue};
+use super::Env;
 
 pub fn intrinsic(name: &str) -> Value {
     match name {
@@ -209,4 +209,3 @@ pub fn intrinsic(name: &str) -> Value {
         _ => panic!("chimera: unknown intrinsic attribute {}", name),
     }
 }
-

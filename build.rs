@@ -26,7 +26,7 @@ fn main() {
     // Instead, one can enable `MLIR_BUILD_MLIR_C_DYLIB` and link dynamically
     // with the libMLIR-C shared library as it containts everything.
     // See: https://github.com/llvm/llvm-project/blob/main/mlir/CMakeLists.txt#L122
-    println!("cargo:rustc-link-search=llvm-project/build/lib");
+    println!("cargo:rustc-link-search=all=llvm-project/build/lib");
     println!("cargo:rustc-link-lib=dylib=MLIR-C");
 
     // Generate and write out bindings to the MLIR C API.

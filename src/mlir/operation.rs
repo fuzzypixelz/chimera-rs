@@ -1,16 +1,13 @@
+use std::marker::PhantomData;
+use std::mem::ManuallyDrop;
+use std::{fmt, slice, str};
+
 use super::attribute::NamedAttribute;
 use super::raw::*;
 use super::region::Region;
-use super::stringref_printer_callback;
 use super::types::Type;
 use super::value::Value;
-use super::{Location, Module};
-
-use std::fmt;
-use std::marker::PhantomData;
-use std::mem::ManuallyDrop;
-use std::slice;
-use std::str;
+use super::{printer_callback, Location, Module};
 
 /// Construct an MLIR Operation from a set of attributes, results and operands.
 pub struct Builder {
@@ -82,7 +79,7 @@ impl Builder {
     /// Add result types to the constructed Operation.
     pub fn results(mut self, items: &[Type<'_>]) -> Self {
         let items = items
-            .into_iter()
+            .iter()
             .map(|type_| type_.as_raw())
             .collect::<Box<[_]>>();
         unsafe {
@@ -181,13 +178,7 @@ impl From<Module> for Operation {
 
 impl fmt::Display for Operation {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        unsafe {
-            mlirOperationPrint(
-                self.inner,
-                Some(stringref_printer_callback),
-                f as *mut _ as *mut _,
-            )
-        }
+        unsafe { mlirOperationPrint(self.inner, Some(printer_callback), f as *mut _ as *mut _) }
         // A bit unfortunate that we cannot get the results from the callback.
         Ok(())
     }

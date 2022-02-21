@@ -1,7 +1,8 @@
 use std::marker::PhantomData;
 
+use super::raw::*;
 use super::types::Type;
-use super::{raw::*, Context};
+use super::Context;
 
 #[derive(Copy, Clone)]
 /// Wrapper around the C API's MlirNamedAttribute.

@@ -1,6 +1,7 @@
 use std::{fmt, marker::PhantomData};
 
-use super::{raw::*, stringref_printer_callback, Context};
+use super::raw::*;
+use super::{printer_callback, Context};
 
 #[derive(Clone, Copy)]
 /// Wrapper around the C API's MlirType.
@@ -48,6 +49,7 @@ impl Context {
         }
     }
 
+    /// Make an MLIR function type from its `input` types and `result` types.
     pub fn get_func_type(&self, input: &[Type<'_>], result: &[Type<'_>]) -> Type<'_> {
         let input = input
             .iter()
@@ -82,13 +84,7 @@ impl PartialEq for Type<'_> {
 
 impl fmt::Display for Type<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        unsafe {
-            mlirTypePrint(
-                self.inner,
-                Some(stringref_printer_callback),
-                f as *mut _ as *mut _,
-            )
-        }
+        unsafe { mlirTypePrint(self.inner, Some(printer_callback), f as *mut _ as *mut _) }
         Ok(())
     }
 }

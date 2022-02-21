@@ -15,10 +15,9 @@ pub mod types;
 pub mod value;
 
 use std::ffi::c_void;
-use std::fmt;
-use std::slice;
-use std::str;
-use std::{marker::PhantomData, mem::ManuallyDrop};
+use std::marker::PhantomData;
+use std::mem::ManuallyDrop;
+use std::{fmt, slice, str};
 
 use operation::Operation;
 use raw::*;
@@ -31,9 +30,9 @@ impl From<&str> for MlirStringRef {
         }
     }
 }
-
+// TODO: pass in the returned result as a pointer and do proper error handling.
 #[allow(unused_must_use)]
-unsafe extern "C" fn stringref_printer_callback(string: MlirStringRef, data: *mut c_void) {
+unsafe extern "C" fn printer_callback(string: MlirStringRef, data: *mut c_void) {
     let fmt = &mut *(data as *mut fmt::Formatter<'_>);
     let slice = slice::from_raw_parts(string.data as *const u8, string.length as usize);
     // NOTE: should we be using utf8 here?
@@ -49,13 +48,12 @@ pub struct Context {
 impl Context {
     /// Make an empty MLIR context.
     ///
-    /// Currently, this also registers all dialects and all passes for your convenience;
+    /// Currently, this also registers all dialects for your convenience;
     /// which is not particularly efficient and is subject to change.
     pub fn new() -> Self {
         unsafe {
             let inner = mlirContextCreate();
             mlirRegisterAllDialects(inner);
-            mlirRegisterAllPasses();
             Context { inner }
         }
     }
@@ -158,13 +156,7 @@ impl Location<'_> {
 
 impl fmt::Display for Location<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        unsafe {
-            mlirLocationPrint(
-                self.inner,
-                Some(stringref_printer_callback),
-                f as *mut _ as *mut _,
-            )
-        }
+        unsafe { mlirLocationPrint(self.inner, Some(printer_callback), f as *mut _ as *mut _) }
         Ok(())
     }
 }

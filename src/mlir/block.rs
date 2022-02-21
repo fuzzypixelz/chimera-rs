@@ -1,8 +1,9 @@
+use std::marker::PhantomData;
+use std::mem::ManuallyDrop;
+
 use super::operation::Operation;
 use super::raw::*;
 use super::value::Value;
-use std::marker::PhantomData;
-use std::mem::ManuallyDrop;
 
 /// Wrapper around the C API's MlirBlock since we can't implement Drop for Copy types.
 pub struct Block {

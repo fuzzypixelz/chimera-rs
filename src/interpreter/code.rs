@@ -3,7 +3,7 @@ use std::rc::Rc;
 
 use fnv::FnvHashMap;
 
-use crate::value::WoValue;
+use super::value::WoValue;
 
 /// A data-type is `Code` if it can produce a function from `(Env, Cont)` to `Value`,
 /// this Fn is used to (sort of) JIT compile `Expr`'s and `Instr`'s to reusable bits.
@@ -82,7 +82,7 @@ impl Env {
                 match env.borrow().outer.clone() {
                     // TODO: This panic is no longer necessary as the typechecker
                     // is supposed to catch them beforehand. The same goes for all
-                    // the `if let ... {} else {}` blocks in compiler.rs
+                    // the `if let ... {} else {}` blocks in interpreter
                     // It would make more sense to do an `unreachable_unchecked()`
                     // in this case. That function however is unsafe and complete UB.
                     // I would argue it's acceptable since Algorithm J is mathematically

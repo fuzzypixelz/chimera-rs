@@ -1,65 +1,77 @@
-#[macro_use]
+#![deny(elided_lifetimes_in_paths)]
+
 extern crate lalrpop_util;
 
-use std::cell::RefCell;
-use std::rc::Rc;
-use std::{env, fs};
-
-use anyhow::{Context, Result};
-
-use parser::parse;
-
-use crate::code::{Code, Env};
-
-// use crate::typechecker::Lexicon;
-
-mod ast;
-mod attribute;
-mod code;
+mod check;
+mod codegen;
 mod compiler;
 mod error;
-mod lexer;
+mod mlir;
 mod parser;
-mod typechecker;
-mod value;
+// mod interpreter;
 
-lalrpop_mod!(#[allow(clippy::all)] pub grammar);
-
-/*
-    use core::io::println
-
-    let main ~ do
-        -- The answer to life,
-        -- the universe and everything.
-        println 42
-    end
-*/
+use anyhow::{Context, Error, Result};
+use check::cst::CST;
+use clap::{command, Arg};
+use codegen::Generator;
+use compiler::{ccf::CCF, fcf::FCF};
+use parser::{ast::AST, Parser};
+use std::fs;
 
 fn main() -> Result<()> {
-    let mut program = Vec::new();
-    for filename in env::args().skip(1) {
-        let source = fs::read_to_string(&filename).with_context(|| {
-            format!(
-                "error reading source file `{}`, you are on your own.",
-                filename
-            )
-        })?;
-        let items = parse(&source)
-            .with_context(|| format!("error while parsing source file `{}`", filename))?;
+    let matches = command!()
+        .arg(
+            Arg::new("ir")
+                .short('e')
+                .long("emit")
+                .takes_value(true)
+                .help("Print out intermediate representations")
+                .possible_values(["ast", "cst", "ccf", "fcf"])
+                .long_help(
+                    "Print out intermediate representations:\n\
+                     - AST: (Abstract Syntax Tree) the result of running the parser.\n\
+                     - CST: (Concrete Syntax Tree) fully typed version of the AST.\n\
+                     - CCF: (Core Chimera Form) sequence of definition and a main expression.\n\
+                     - FCF: (Flat Chimera Form) all lambdas are lifted into top level functions.",
+                ),
+        )
+        .arg(
+            Arg::new("FILES")
+                .long_help("list of input files to be compiled")
+                .multiple_values(true),
+        )
+        .get_matches();
 
-        // let lexicon = Lexicon::default();
-        // for item in &items {
-        //     lexicon
-        //         .check(item)
-        //         .with_context(|| format!("encountered a type error in source file `{}`", filename))?;
-        // }
+    if let Some(filnames) = matches.values_of("FILES") {
+        let mut ast = AST { items: Vec::new() };
+        for filename in filnames {
+            let source = fs::read_to_string(&filename)
+                .with_context(|| format!("error reading source file `{}`.", filename))?;
+            let items = Parser::new(&source)
+                .run()
+                .with_context(|| format!("error while parsing source file `{}`", filename))?
+                .items;
 
-        program.extend(items);
+            ast.items.extend(items);
+        }
+        if let Some("ast") = matches.value_of("ir") {
+            eprintln!("{ast:#?}")
+        }
+        let cst = CST::try_from(ast)?;
+        if let Some("cst") = matches.value_of("ir") {
+            eprintln!("{cst:#?}")
+        }
+        let ccf = CCF::try_from(cst)?;
+        if let Some("ccf") = matches.value_of("ir") {
+            eprintln!("{ccf:#?}")
+        }
+        let fcf = FCF::from(ccf);
+        if let Some("fcf") = matches.value_of("ir") {
+            eprintln!("{fcf:#?}")
+        }
+        Generator::new(fcf).run();
+        Ok(())
+    } else {
+        Err(Error::msg("no source files were supplied."))
     }
-
-    let env = Rc::new(RefCell::new(Env::default()));
-    for item in program {
-        item.compile().execute(env.clone());
-    }
-    Ok(())
 }

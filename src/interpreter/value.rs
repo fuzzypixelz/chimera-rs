@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::fmt::Display;
 use std::rc::Rc;
 
-use crate::code::{CompiledCode, WoEnv};
+use super::code::{CompiledCode, WoEnv};
 
 pub type WoValue = Rc<RefCell<Value>>;
 
@@ -79,7 +79,7 @@ impl From<List> for Vec<WoValue> {
 }
 
 impl Display for Value {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Value::Void => write!(f, "()"),
             Value::Int(i) => write!(f, "{}", i),

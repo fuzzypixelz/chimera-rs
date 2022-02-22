@@ -1,11 +1,14 @@
+mod attribute;
+pub mod code;
+mod value;
+
 use std::cell::RefCell;
-// use std::io::{self, Read};
 use std::rc::Rc;
 
 use crate::ast::{Expr, Item, ItemKind, Stmt};
-use crate::attribute::intrinsic;
-use crate::code::{Code, CompiledCode, Env};
-use crate::value::Value;
+use attribute::intrinsic;
+use code::{Code, CompiledCode, Env};
+use value::Value;
 
 impl Code for Expr {
     fn compile(self) -> CompiledCode {

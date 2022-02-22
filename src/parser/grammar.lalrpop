@@ -2,8 +2,8 @@ use std::collections::HashMap;
 
 use polytype::{Type, TypeSchema, Variable};
 
-use crate::ast::*;
-use crate::lexer::Tok;
+use crate::parser::ast::*;
+use crate::parser::lexer::Tok;
 use crate::error::LexicalError;
 
 // NOTE: The type_builder is a temporary HashMap that keeps
@@ -13,10 +13,8 @@ use crate::error::LexicalError;
 // once the non-terminal is fully parsed.
 grammar<'input>(input: &'input str, type_builder: &mut HashMap<String, usize>);
 
-pub Program: Vec<Item> = Item*;
-
-Item: Item = {
-    <attr: Attr?> <kind: ItemKind> => Item { attr, kind }
+pub AST: AST = {
+    <items: Item*> => AST { items }
 };
 
 Attr: Attr = {
@@ -24,38 +22,37 @@ Attr: Attr = {
         => Attr { name, args }
 };
 
-
-pub ItemKind: ItemKind = {
-    Definition,
-    DataType,
-    Module,
+Item: Node<Item> = {
+    AttrNode<Definition>,
+    // DataType,
+    // Module,
 };
 
-Definition: ItemKind = {
+Definition: Item = {
     "let" <name: Name> <ann: NL<Ann>?> NL<"="> <expr: Expr> "newline"
-        => ItemKind::Definition { name, ann, expr }
+        => Item::Definition { name, ann, expr }
 };
 
-DataType: ItemKind = {
-    "data" <schema: TypeSchema> "newline"
-        <variants: SepList<Variant, NL<",">>>
-    NL<"end"> => {
-        type_builder.clear();
-        ItemKind::DataType { schema, variants }
-    }
-};
-
-Variant: (String, Vec<(String, TypeSchema)>) = {
-    <TypeName> NL<"{">
-        <SepList<(<Name> ":" <TypeSchema>), NL<",">>>
-    "}"
-};
-
-Module: ItemKind = {
-    "mod" <name: Name> "newline"
-        <items: Item*> 
-    "end" => ItemKind::Module { name, items }
-};
+// DataType: ItemKind = {
+//     "data" <schema: TypeSchema> "newline"
+//         <variants: SepList<Variant, NL<",">>>
+//     NL<"end"> => {
+//         type_builder.clear();
+//         ItemKind::DataType { schema, variants }
+//     }
+// };
+// 
+// Variant: (String, Vec<(String, TypeSchema)>) = {
+//     <TypeName> NL<"{">
+//         <SepList<(<Name> ":" <TypeSchema>), NL<",">>>
+//     "}"
+// };
+// 
+// Module: ItemKind = {
+//     "mod" <name: Name> "newline"
+//         <items: Item*> 
+//     "end" => ItemKind::Module { name, items }
+// };
 
 Ann: TypeSchema = {
     ":" <TypeSchema> => {
@@ -124,148 +121,137 @@ Stmt: Stmt = {
     <Expr> "newline" => Stmt::Expr(<>),
 };
 
-Expr: Expr = {
+Expr: Node<Expr> = {
     Infix,
     // TODO: See if we can remove the necessary () around |x| do .. end
     // functions by having two seperate terminals, one for "single-line"
     // lambdas and another do "multi-line" lambdas.
-    Lambda,
-    Assign,
+    Node<Lambda>,
+    // Assign,
 };
 
 Lambda: Expr = {
-    "|" <ps: Name+> NL<"|"> <e: Expr> => {
-        let mut lambda = e;
-        for param in ps.into_iter().rev() {
-            lambda = Expr::Lambda {
-                param,
-                expr: Box::new(lambda),
-            };
-        }
-        lambda
-    }
+    NL<"fn"> <params: NL<Name>+> NL<"=>"> <e: Expr> => Expr::Lambda { params, expr: Box::new(e) }
 };
 
-Infix: Expr = {
-    NInfix,
-    <l: Infix> <op: Operator> <r: NInfix> => Expr::Apply {
-        left: Box::new(Expr::Apply { 
-            left: Box::new(Expr::Name(op)),
-            right: Box::new(l)
-        }),
-        right: Box::new(r)
-    },
-};
-
-NInfix: Expr = {
-    Apply,
+Infix: Node<Expr> = {
     NApply,
+    Node<Apply>,
+//     <l: Infix> <op: Operator> <r: NInfix> => Expr::Apply {
+//         left: Box::new(Expr::Apply { 
+//             left: Box::new(Expr::Name(op)),
+//             right: Box::new(l)
+//         }),
+//         right: Box::new(r)
+//     },
 };
- 
-NApply: Expr = {
-    Ellipsis,
-    Void,
-    Int,
-    Bool,
-    Char,
-    List,
-    Str,
-    Ident,
-    Branch,
-    Field,
-    DoBlock,
+
+NApply: Node<Expr> = {
+    // Ellipsis,
+    Node<Void>,
+    Node<Lit>,
+    // Bool,
+    // Char,
+    // List,
+    // Str,
+    Node<Ident>,
+    // Branch,
+    // Field,
+    Node<DoBlock>,
     "(" <Expr> ")",
 };
 
-Ellipsis: Expr = {
-    "..." => Expr::Ellipsis
-};
+// Ellipsis: Expr = {
+//     "..." => Expr::Ellipsis
+// };
 
 Void: Expr = {
     "(" ")" => Expr::Void
 };
 
-Int: Expr = {
+Lit: Expr = {
     "Int" => match <> {
-        Tok::IntLiteral(i)  => Expr::Int(i),
+        Tok::IntLiteral(i) => Expr::Lit(Lit::Int(i)),
         _ => unreachable!()
     }
 };
 
-Bool: Expr = {
-    "true" => Expr::Bool(true),
-    "false" => Expr::Bool(false)
-};
+// Bool: Expr = {
+//     "true" => Expr::Bool(true),
+//     "false" => Expr::Bool(false)
+// };
+// 
+// Char: Expr = {
+//     "Char" => match <> {
+//         Tok::CharLiteral(c)  => Expr::Char(c),
+//         _ => unreachable!()
+//     }
+// };
+// 
+// Str: Expr = {
+//     "Str" => Expr::List(<>.chars()
+//                           .map(|c| Expr::Char(c))
+//                           .collect())
+// };
 
-Char: Expr = {
-    "Char" => match <> {
-        Tok::CharLiteral(c)  => Expr::Char(c),
-        _ => unreachable!()
-    }
-};
-
-Str: Expr = {
-    "Str" => Expr::List(<>.chars()
-                          .map(|c| Expr::Char(c))
-                          .collect())
-};
-
-List: Expr = {
-    NL<"["> <v: SepList<Expr, NL<",">>> "]" => Expr::List(v)
-
-}
+// List: Expr = {
+//     NL<"["> <v: SepList<Expr, NL<",">>> "]" => Expr::List(v)
+// 
+// }
 
 Ident: Expr = {
     Name => Expr::Name(<>)
 };
 
-Branch: Expr = {
-    "if" <e: Expr> NL<"then"> <b1: Block>
-    <b2: (NL<"elif"> <Expr> NL<"then"> <Block>)*>
-    <b3: (NL<"else"> <Block>)?> "end"
-    => { 
-        // FIXME: the parser should not arbitrarily insert AST nodes,
-        // this should ideally be moved much further down.
-        let b3 = match b3 {
-            // If the user doesn't provide an else clause
-            // we insert one with a `()` expression which
-            // forces the entire expression to have type Void.
-            None    => vec![Stmt::Expr(Expr::Void)],
-            Some(v) => v
-        };
-        let mut paths = vec![(e, b1)];
-        paths.extend(b2.into_iter());
-        paths.push((
-            Expr::Bool(true),
-            b3
-        ));
-        Expr::Branch { paths }
-    }
-};
+// Branch: Expr = {
+//     "if" <e: Expr> NL<"then"> <b1: Block>
+//     <b2: (NL<"elif"> <Expr> NL<"then"> <Block>)*>
+//     <b3: (NL<"else"> <Block>)?> "end"
+//     => { 
+//         // FIXME: the parser should not arbitrarily insert AST nodes,
+//         // this should ideally be moved much further down.
+//         let b3 = match b3 {
+//             // If the user doesn't provide an else clause
+//             // we insert one with a `()` expression which
+//             // forces the entire expression to have type Void.
+//             None    => vec![Stmt::Expr(Expr::Void)],
+//             Some(v) => v
+//         };
+//         let mut paths = vec![(e, b1)];
+//         paths.extend(b2.into_iter());
+//         paths.push((
+//             Expr::Bool(true),
+//             b3
+//         ));
+//         Expr::Branch { paths }
+//     }
+// };
 
 Block: Vec<Stmt> = {
-    Expr    => vec![Stmt::Expr(<>)],
+    Expr => vec![Stmt::Expr(<>)],
     <Stmt+>
 };
 
 DoBlock: Expr = {
-    NL<"do"> <Block> "end" => Expr::Block { body: <> }
+    NL<"do"> <Block> "end" => Expr::Block { body: <> },
 };
 
 Apply: Expr = {
-    <l: Apply>  <r: NApply> => Expr::Apply { left: Box::new(l), right: Box::new(r) },
-    <l: NApply> <r: NApply> => Expr::Apply { left: Box::new(l), right: Box::new(r) },
+    // It is completely unecessary to go the Haskell route and make this rule
+    // recursive with respect to Apply. While this is not an accurate representation
+    // of applications in Lambda Calclus, it is a flat form that's easier to handle.
+    <left: NApply> <right: NApply+> => Expr::Apply { left: Box::new(left), right },
 };
 
-Field: Expr = {
-    <expr: NApply> "." <name: Name>
-        => Expr::Field { expr: Box::new(expr), name }
-};
-
-Assign: Expr = {
-    <left: Field> "=" <right: Expr>
-        => Expr::Assign { left: Box::new(left), right: Box::new(right) }
-};
+// Field: Expr = {
+//     <expr: NApply> "." <name: Name>
+//         => Expr::Field { expr: Box::new(expr), name }
+// };
+// 
+// Assign: Expr = {
+//     <left: Field> "=" <right: Expr>
+//         => Expr::Assign { left: Box::new(left), right: Box::new(right) }
+// };
  
 TypeName: String = <"TypeName"> => <>.to_string();
 Name:     String = {
@@ -295,6 +281,22 @@ Many2<T>: Vec<T> = {
     <mut v: T+> <e: T> => { v.push(e); v }
 };
 
+Node<T>: Node<T> = {
+    <start: @L> <inner: T> <end: @R> => Node {
+        span: Span { start, end },
+        attr: None,
+        inner
+    }
+};
+
+AttrNode<T>: Node<T> = {
+    <start: @L> <attr: Attr?> <inner: T> <end: @R> => Node {
+        span: Span { start, end },
+        attr,
+        inner
+    }
+};
+
 extern {
     type Location = usize;
     type Error = LexicalError;
@@ -315,6 +317,7 @@ extern {
 
         "mod"      => Tok::Mod,
         "let"      => Tok::Let,
+        "fn"       => Tok::Fn,
         "do"       => Tok::Do,
         "end"      => Tok::End,
         "data"     => Tok::Data,
@@ -333,6 +336,7 @@ extern {
         "..."      => Tok::Ellipsis,
         ":"        => Tok::Colon,
         "->"       => Tok::Arrow,
+        "=>"       => Tok::DArrow,
         "|"        => Tok::Pipe,
         "="        => Tok::Equal,
         "~"        => Tok::Tilde,

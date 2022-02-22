@@ -1,0 +1,3 @@
+let id = fn x => x
+
+let main = id 42

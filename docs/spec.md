@@ -44,7 +44,7 @@ let identity = x => x
 
 Applications involve a **lambda** expression on the left hand side and any number of expression
 on the right hand side. This has the effect of binding the arguments in the function body and
-returning the result of evaluation.
+returning the result of evaluation. We currently do not support curried calls.
 
 ```
 let zero = identity 0

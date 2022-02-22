@@ -43,8 +43,10 @@ fn main() {
         .expect("could not write bindings.");
 
     // Process the LALRPOP grammar file.
+    println!("cargo:rerun-if-changed=src/parser/grammar.lalrpop");
     lalrpop::Configuration::new()
         .log_info()
-        .process_current_dir()
+        .set_out_dir(out_path)
+        .process_file("src/parser/grammar.lalrpop")
         .expect("could not run LALRPOP.");
 }

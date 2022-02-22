@@ -13,6 +13,7 @@ mod parser;
 use anyhow::{Context, Error, Result};
 use check::cst::CST;
 use clap::{command, Arg};
+use codegen::Generator;
 use compiler::{ccf::CCF, fcf::FCF};
 use parser::{ast::AST, Parser};
 use std::fs;
@@ -68,6 +69,7 @@ fn main() -> Result<()> {
         if let Some("fcf") = matches.value_of("ir") {
             eprintln!("{fcf:#?}")
         }
+        Generator::new(fcf).run();
         Ok(())
     } else {
         Err(Error::msg("no source files were supplied."))

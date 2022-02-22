@@ -2,8 +2,9 @@ use std::marker::PhantomData;
 use std::mem::ManuallyDrop;
 
 use super::operation::Operation;
-use super::raw::*;
+use super::types::Type;
 use super::value::Value;
+use super::{raw::*, Location};
 
 /// Wrapper around the C API's MlirBlock since we can't implement Drop for Copy types.
 pub struct Block {
@@ -15,8 +16,12 @@ impl Block {
     ///
     /// This method takes a slice of pairs rather than a pair of slices to
     /// enforce the fact that the number of types must match the number of locations.
-    pub fn new(arguments: &[(MlirType, MlirLocation)]) -> Self {
-        let (types, locs): (Vec<_>, Vec<_>) = arguments.iter().cloned().unzip();
+    pub fn new(arguments: &[(Type<'_>, Location<'_>)]) -> Self {
+        let (types, locs): (Vec<_>, Vec<_>) = arguments
+            .iter()
+            .cloned()
+            .map(|(t, l)| (t.into_raw(), l.into_raw()))
+            .unzip();
         Block {
             inner: unsafe {
                 mlirBlockCreate(arguments.len() as isize, types.as_ptr(), locs.as_ptr())

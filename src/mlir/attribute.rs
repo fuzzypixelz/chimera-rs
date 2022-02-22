@@ -63,10 +63,10 @@ impl Attribute<'_> {
         }
     }
 
-    /// Create an integer attribute from a type and a size.
-    pub fn new_integer(type_: Type<'_>, size: usize) -> Self {
+    /// Create an signed integer attribute from a type and a value.
+    pub fn new_integer(type_: Type<'_>, value: i64) -> Self {
         Attribute {
-            inner: unsafe { mlirIntegerAttrGet(type_.into_raw(), size as i64) },
+            inner: unsafe { mlirIntegerAttrGet(type_.into_raw(), value) },
             _marker: PhantomData,
         }
     }

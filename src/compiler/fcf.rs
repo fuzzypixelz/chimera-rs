@@ -38,8 +38,8 @@ pub struct Func {
 
 #[derive(Debug)]
 pub struct FlatExpr {
-    kind: Type,
-    expr: Expr,
+    pub kind: Type,
+    pub expr: Expr,
 }
 
 #[derive(Debug)]

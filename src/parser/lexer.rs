@@ -25,6 +25,7 @@ pub enum Tok<'input> {
 
     Mod,
     Let,
+    Fn,
     Do,
     End,
     Data,
@@ -42,6 +43,7 @@ pub enum Tok<'input> {
 
     Colon,
     Arrow,
+    DArrow,
     Pipe,
     Comma,
     Equal,
@@ -58,35 +60,6 @@ pub enum Tok<'input> {
     Newline,
 }
 
-pub static RESERVED_NAMES: phf::Map<&'static str, Tok> = phf::phf_map! {
-    "mod"       => Tok::Mod,
-    "let"       => Tok::Let,
-    "do"        => Tok::Do,
-    "end"       => Tok::End,
-    "data"      => Tok::Data,
-    "forall"    => Tok::Forall,
-    "true"      => Tok::True,
-    "false"     => Tok::False,
-    "if"        => Tok::If,
-    "then"      => Tok::Then,
-    "elif"      => Tok::Elif,
-    "else"      => Tok::Else,
-    "loop"      => Tok::Loop,
-    "break"     => Tok::Break,
-};
-
-pub static RESERVED_SYMBOLS: phf::Map<&'static str, Tok> = phf::phf_map! {
-    "..." => Tok::Ellipsis,
-    ":"   => Tok::Colon,
-    "->"  => Tok::Arrow,
-    "|"   => Tok::Pipe,
-    "="   => Tok::Equal,
-    "~"   => Tok::Tilde,
-    "@"   => Tok::At,
-    "."   => Tok::Dot,
-    "#"   => Tok::Hash,
-};
-
 pub struct Lexer<'input> {
     chars: Peekable<CharIndices<'input>>,
     input: &'input str,
@@ -101,8 +74,8 @@ impl<'input> Lexer<'input> {
     }
 
     fn take_while<F>(&mut self, start: usize, mut predicate: F) -> (usize, &'input str)
-        where
-            F: FnMut(char) -> bool,
+    where
+        F: FnMut(char) -> bool,
     {
         while let Some(&(end, c)) = self.chars.peek() {
             if !predicate(c) {
@@ -118,10 +91,23 @@ impl<'input> Lexer<'input> {
 
     fn name(&mut self, start: usize) -> Spanned<'input> {
         let (end, src) = self.take_while(start, |c| c.is_alphanumeric() || c == '_');
-        let token = if RESERVED_NAMES.contains_key(src) {
-            RESERVED_NAMES[src]
-        } else {
-            Tok::Name(src)
+        let token = match src {
+            "mod" => Tok::Mod,
+            "let" => Tok::Let,
+            "fn" => Tok::Fn,
+            "do" => Tok::Do,
+            "end" => Tok::End,
+            "data" => Tok::Data,
+            "forall" => Tok::Forall,
+            "true" => Tok::True,
+            "false" => Tok::False,
+            "if" => Tok::If,
+            "then" => Tok::Then,
+            "elif" => Tok::Elif,
+            "else" => Tok::Else,
+            "loop" => Tok::Loop,
+            "break" => Tok::Break,
+            _ => Tok::Name(src),
         };
 
         Ok((start, token, end))
@@ -129,21 +115,26 @@ impl<'input> Lexer<'input> {
 
     fn type_name(&mut self, start: usize) -> Spanned<'input> {
         let (end, src) = self.take_while(start, |c| c.is_alphanumeric() || c == '_');
-        let token = if RESERVED_NAMES.contains_key(src) {
-            RESERVED_NAMES[src]
-        } else {
-            Tok::TypeName(src)
-        };
+        // No clashes with keywords are possible since all typenames are CamelCase.
+        let token = Tok::TypeName(src);
 
         Ok((start, token, end))
     }
 
     fn operator(&mut self, start: usize) -> Spanned<'input> {
         let (end, src) = self.take_while(start, |c| "/~!@#$%^&*-+=|:;?<>.,\\".contains(c));
-        let token = if RESERVED_SYMBOLS.contains_key(src) {
-            RESERVED_SYMBOLS[src]
-        } else {
-            Tok::Operator(src)
+        let token = match src {
+            "..." => Tok::Ellipsis,
+            ":" => Tok::Colon,
+            "->" => Tok::Arrow,
+            "=>" => Tok::DArrow,
+            "|" => Tok::Pipe,
+            "=" => Tok::Equal,
+            "~" => Tok::Tilde,
+            "@" => Tok::At,
+            "." => Tok::Dot,
+            "#" => Tok::Hash,
+            _ => Tok::Operator(src),
         };
 
         Ok((start, token, end))
@@ -164,22 +155,16 @@ impl<'input> Lexer<'input> {
 
     fn character(&mut self, start: usize) -> Spanned<'input> {
         self.chars.next();
-        let (_, src) = self
-            .chars
-            .next()
-            .ok_or(LexicalError::InvalidSyntax)?;
+        let (_, src) = self.chars.next().ok_or(LexicalError::InvalidSyntax)?;
         let token = if src == '\\' {
-            let (_, escape) = self
-                .chars
-                .next()
-                .ok_or(LexicalError::InvalidSyntax)?;
+            let (_, escape) = self.chars.next().ok_or(LexicalError::InvalidSyntax)?;
             Tok::CharLiteral(match escape {
                 '\\' => '\\',
                 '\'' => '\'',
                 'n' => '\n',
                 'r' => '\r',
                 't' => '\t',
-                _ => return Err(LexicalError::InvalidSyntax)
+                _ => return Err(LexicalError::InvalidSyntax),
             })
         } else {
             Tok::CharLiteral(src)

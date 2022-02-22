@@ -1,22 +1,42 @@
+pub mod ast;
+mod lexer;
+lalrpop_mod!(#[allow(clippy::all)] pub grammar, "/src/parser/grammar.rs");
+
 use std::collections::HashMap;
 
-use annotate_snippets::{
-    display_list::{DisplayList, FormatOptions},
-    snippet::{Annotation, AnnotationType, Slice, Snippet, SourceAnnotation},
-};
+use annotate_snippets::display_list::{DisplayList, FormatOptions};
+use annotate_snippets::snippet::{Annotation, AnnotationType, Slice, Snippet, SourceAnnotation};
 use anyhow::{Error, Result};
-use lalrpop_util::ParseError;
+use lalrpop_util::{lalrpop_mod, ParseError};
 
-use crate::{ast::Item, lexer::Tok};
 use crate::error::LexicalError;
-use crate::lexer::Lexer;
+use ast::AST;
+use grammar::ASTParser;
+use lexer::{Lexer, Tok};
 
-pub fn parse(source: &str) -> Result<Vec<Item>> {
-    let lexer = Lexer::new(source);
-    let result = crate::grammar::ProgramParser::new().parse(source, &mut HashMap::new(), lexer);
-    match result {
-        Ok(program) => Ok(program),
-        Err(error) => Err(Error::msg(fmt_parse_error(source, error))),
+pub struct Parser<'p> {
+    source: &'p str,
+    inner: ASTParser,
+    lexer: Lexer<'p>,
+}
+
+impl<'p> Parser<'p> {
+    pub fn new(source: &'p str) -> Self {
+        Parser {
+            source,
+            inner: grammar::ASTParser::new(),
+            lexer: Lexer::new(source),
+        }
+    }
+
+    pub fn run(self) -> Result<AST> {
+        let result = self
+            .inner
+            .parse(self.source, &mut HashMap::new(), self.lexer);
+        match result {
+            Ok(program) => Ok(program),
+            Err(error) => Err(Error::msg(fmt_parse_error(self.source, error))),
+        }
     }
 }
 
@@ -101,18 +121,14 @@ fn ann_parse_error(source: &str, label: &str, slice_label: &str, range: (usize, 
 
 #[cfg(test)]
 mod tests {
-    use ::polytype::*;
-
-    use crate::ast::*;
-
+    /*
     use super::*;
 
     #[test]
     fn empty_program() {
         let source = r"";
         let lexer = Lexer::new(&source);
-        let result =
-            crate::grammar::ProgramParser::new().parse(&source, &mut HashMap::new(), lexer);
+        let result = grammar::ASTParser::new().parse(&source, &mut HashMap::new(), lexer);
         assert_eq!(result, Ok(vec![]))
     }
 
@@ -321,4 +337,5 @@ mod tests {
             }])
         )
     }
+    */
 }
